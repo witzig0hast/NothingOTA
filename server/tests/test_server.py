@@ -131,6 +131,32 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     assert any(u["name"] == "gb.zip" for u in svc.store.uploads())
 
 
+def test_nap_is_not_last_night(server, tmp_path):
+    """An afternoon nap must not replace last night; split nights are merged."""
+    _, _, base = server
+    d = date.today().isoformat()
+    from datetime import timedelta
+    y = (date.today() - timedelta(days=1)).isoformat()
+    from datetime import datetime as dt
+    off = dt.now().astimezone().strftime("%z")
+    off = off[:3] + ":" + off[3:]
+    z = tmp_path / "s.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("sleep_sessions.csv",
+                    "fell_asleep,woke_up,time_in_bed_min,asleep_min,deep_min,light_min,rem_min,awake_min\n"
+                    f"{y}T23:00:00{off},{d}T02:30:00{off},210,200,60,120,20,10\n"
+                    f"{d}T03:00:00{off},{d}T07:00:00{off},240,230,30,150,50,10\n"
+                    f"{d}T14:10:00{off},{d}T14:55:00{off},45,40,0,40,0,5\n")
+    code, res = req(base + "/api/upload", z.read_bytes())
+    assert code == 200, res
+    st = res["state"]
+    assert st["sleep_duration"] == 430 and st["sleep_awake"] == 50 and st["sleep_deep"] == 90
+    assert st["sleep_end"].startswith(f"{d}T07:00") or "06:00" in st["sleep_end"] or st["sleep_end"].endswith("+00:00")
+    assert st["nap_today"] == 40
+    nights = req(base + "/api/history?metric=nights&days=3")[1]
+    assert [n["type"] for n in nights] == ["night", "nap"]
+
+
 def test_tracker_workout_zip(server, tmp_path):
     """Upload format of the CMF Track app (workouts.csv with distance/heart rate + heart_rate.csv)."""
     _, _, base = server

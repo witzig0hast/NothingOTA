@@ -67,6 +67,7 @@ class GadgetbridgeExporter(private val ctx: Context) {
 
         val days = Days()
         val nights = mutableListOf<SleepNight>()
+        var sleep = Sleep.Grouped(emptyList(), emptyList())
         val gps = mutableListOf<Triple<Long, Double, Double>>()
         var lastBattery: Int? = null
         var lastBatteryTime: Instant? = null
@@ -131,8 +132,9 @@ class GadgetbridgeExporter(private val ctx: Context) {
                     nights += SleepNight(Instant.ofEpochMilli(start), Instant.ofEpochMilli(end), mins[0], mins[1], mins[2], mins[3], "Gadgetbridge")
                 }
             }
-            z.table("sleep_sessions.csv", SLEEP_COLUMNS) { nights.forEach { sleepRow(it) } }
-            days.addNights(nights)
+            sleep = Sleep.group(nights)
+            z.writeSleep(nights, sleep)
+            days.addSleep(sleep)
 
             // Workouts + GPS
             progress("Trainings …")
@@ -178,12 +180,12 @@ class GadgetbridgeExporter(private val ctx: Context) {
                 }
             }
             z.writeDaily(days)
-            val html = Report.html("Gadgetbridge", nights, days)
+            val html = Report.html("Gadgetbridge", sleep, days)
             z.text("report.html", html)
             val counts = z.counts.filterKeys { !it.startsWith("CMF_") && it !in setOf("DEVICE", "BASE_ACTIVITY_SUMMARY", "BATTERY_LEVEL") }
             val (steps, stepsDay) = Dashboard.today(days)
-            val dash = Dashboard(nights.maxByOrNull { it.end }, steps, stepsDay, lastHr?.second, lastHr?.first, lastBattery, lastBatteryTime)
-            return ExportResult(out, summaryText("Quelle: Gadgetbridge\nGeräte:\n$devices", counts, nights), html, dash)
+            val dash = Dashboard(sleep.nights.lastOrNull(), steps, stepsDay, lastHr?.second, lastHr?.first, lastBattery, lastBatteryTime, nap = Dashboard.napToday(sleep))
+            return ExportResult(out, summaryText("Quelle: Gadgetbridge\nGeräte:\n$devices", counts, sleep), html, dash)
         }
     }
 

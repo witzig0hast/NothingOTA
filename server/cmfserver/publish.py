@@ -31,6 +31,8 @@ SENSORS = [
     Sensor("sleep_awake", "Wachphasen", "min", "duration", "measurement", "mdi:eye"),
     Sensor("sleep_in_bed", "Zeit im Bett", "min", "duration", "measurement", "mdi:bed"),
     Sensor("sleep_efficiency", "Schlafeffizienz", "%", None, "measurement", "mdi:percent"),
+    Sensor("nap_today", "Nickerchen heute", "min", "duration", "measurement", "mdi:sofa"),
+    Sensor("sleep_avg_7d", "Schlaf Ø 7 Tage", "min", "duration", "measurement", "mdi:chart-line"),
     Sensor("sleep_start", "Eingeschlafen", None, "timestamp", None, "mdi:bed-clock"),
     Sensor("sleep_end", "Aufgewacht", None, "timestamp", None, "mdi:alarm"),
     Sensor("steps_today", "Schritte heute", "steps", None, "total_increasing", "mdi:walk"),

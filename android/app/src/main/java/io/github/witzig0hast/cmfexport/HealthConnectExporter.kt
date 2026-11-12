@@ -93,6 +93,7 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
 
         val days = Days()
         val nights = mutableListOf<SleepNight>()
+        var sleep = Sleep.Grouped(emptyList(), emptyList())
         var lastHr: Pair<Instant, Int>? = null
 
         ExportZip(out).use { z ->
@@ -115,9 +116,10 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
                     }
                     nights += SleepNight(r.startTime, r.endTime, m[0], m[1], m[2], m[3], r.metadata.dataOrigin.packageName, r.stages.isNotEmpty())
                 }
-                z.table("sleep_sessions.csv", SLEEP_COLUMNS) { nights.forEach { sleepRow(it) } }
+                sleep = Sleep.group(nights)
+                z.writeSleep(nights, sleep)
                 z.table("sleep_stages.csv", listOf("start", "end", "duration_min", "stage", "stage_raw", "session_id")) { stageRows.forEach { row(it) } }
-                days.addNights(nights)
+                days.addSleep(sleep)
             }
             section(z, granted, HeartRateRecord::class, progress) {
                 z.table("heart_rate.csv", listOf("time", "bpm") + metaCols) {
@@ -209,7 +211,7 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
             }
 
             z.writeDaily(days)
-            val html = Report.html("Health Connect" + if (onlyCmf) " (nur CMF-App)" else "", nights, days)
+            val html = Report.html("Health Connect" + if (onlyCmf) " (nur CMF-App)" else "", sleep, days)
             z.text("report.html", html)
             val header = buildString {
                 appendLine("Quelle: Health Connect, letzte $daysBack Tage" + if (onlyCmf) ", nur CMF-App" else "")
@@ -220,8 +222,8 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
             }
             val counts = z.counts.filterKeys { it != "daily_summary" }
             val (steps, stepsDay) = Dashboard.today(days)
-            val dash = Dashboard(nights.maxByOrNull { it.end }, steps, stepsDay, lastHr?.second, lastHr?.first)
-            return ExportResult(out, summaryText(header, counts, nights), html, dash)
+            val dash = Dashboard(sleep.nights.lastOrNull(), steps, stepsDay, lastHr?.second, lastHr?.first, nap = Dashboard.napToday(sleep))
+            return ExportResult(out, summaryText(header, counts, sleep), html, dash)
         }
     }
 

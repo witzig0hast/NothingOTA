@@ -14,6 +14,7 @@ def _sleep_rows(sessions):
         return "<p>Keine Schlafdaten gefunden.</p>"
     longest = max((s["time_in_bed_min"] or 1) for s in sessions)
     rows = []
+    sessions = sorted(sessions, key=lambda x: x.get("fell_asleep") or x.get("start") or "")
     for s in reversed(sessions[-60:]):
         bars = "".join(
             f'<span style="width:{100 * (s.get(k + "_min") or 0) / longest:.2f}%;background:{c}" '
@@ -22,7 +23,7 @@ def _sleep_rows(sessions):
         start = s.get("fell_asleep") or s.get("start")
         end = s.get("woke_up") or s.get("end")
         rows.append(
-            f"<tr><td>{escape(start[:16].replace('T', ' '))}</td><td>{escape(end[11:16])}</td>"
+            f"<tr><td>{escape(start[:16].replace('T', ' '))}{' · Nickerchen' if s.get('type') == 'nap' else ''}</td><td>{escape(end[11:16])}</td>"
             f"<td>{fmt_minutes(asleep) if asleep is not None else '?'}</td>"
             f"<td>{fmt_minutes(s['deep_min'])}</td><td>{fmt_minutes(s['light_min'])}</td>"
             f"<td>{fmt_minutes(s['rem_min'])}</td><td>{fmt_minutes(s['awake_min'])}</td>"

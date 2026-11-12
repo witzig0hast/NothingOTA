@@ -168,6 +168,11 @@ class MainActivity : AppCompatActivity() {
             if (!it.hasStages) "ohne Schlafphasen" else "● Tief ${hm(it.deep)}   ● Leicht ${hm(it.light)}   ● REM ${hm(it.rem)}   ● Wach ${hm(it.awake)}"
         } ?: ""
         colorLegend()
+        v<TextView>(R.id.napText).apply {
+            val nap = d.nap?.takeIf { day(it.start) == LocalDate.now(zone) }
+            visibility = if (nap != null) View.VISIBLE else View.GONE
+            text = nap?.let { "Nickerchen heute: ${hm(it.asleep).replace("h", " h ")} min" + (if (it.segments > 1) " (${it.segments}×)" else " ab ${it.start.atZone(zone).format(hhmm)}") + " – zählt nicht zur Nacht" } ?: ""
+        }
 
         val nf = NumberFormat.getIntegerInstance()
         val today = LocalDate.now(zone).toString()

@@ -28,7 +28,7 @@ def main(argv=None) -> None:
     if a.cmd == "gadgetbridge":
         res = gadgetbridge.export(a.db, out, a.device, a.raw)
         gadgetbridge.print_summary(res)
-        report.write(out / "report.html", res["daily"], res["sessions"], "Gadgetbridge")
+        report.write(out / "report.html", res["daily"], res["sessions"] + res.get("naps", []), "Gadgetbridge")
     else:
         res = healthconnect.export(a.db, out, a.app)
         healthconnect.print_summary(res)

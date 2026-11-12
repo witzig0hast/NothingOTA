@@ -24,6 +24,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from .common import columns, fmt_minutes, iso, open_db, tables, write_csv, write_json
+from . import sleep as sleeplib
 from .workout_types import WORKOUT_TYPES
 
 SLEEP_STAGES = {1: "deep", 2: "light", 3: "rem"}  # everything else -> awake
@@ -215,7 +216,28 @@ def _write_gpx(path: Path, w: dict) -> None:
         f'    <trkseg>\n{pts}\n    </trkseg>\n  </trk>\n</gpx>\n', encoding="utf-8")
 
 
-def _daily(activity, hr, spo2, stress, sessions):
+def _as_session(s: dict) -> sleeplib.Session:
+    from datetime import datetime
+    return sleeplib.Session(datetime.fromisoformat(s["fell_asleep"]), datetime.fromisoformat(s["woke_up"]),
+                            s["deep_min"], s["light_min"], s["rem_min"], s["awake_min"],
+                            has_stages=(s["deep_min"] + s["light_min"] + s["rem_min"]) > 0, source=str(s.get("device_id")))
+
+
+def _night_row(n: sleeplib.Session) -> dict:
+    return {
+        "night_of": (n.start.astimezone().date().isoformat() if n.nap else sleeplib.day_of(n).isoformat()),
+        "type": "nap" if n.nap else "night",
+        "fell_asleep": n.start.astimezone().isoformat(timespec="seconds"),
+        "woke_up": n.end.astimezone().isoformat(timespec="seconds"),
+        "time_in_bed_min": round(n.in_bed, 1), "asleep_min": round(n.asleep, 1),
+        "deep_min": round(n.deep, 1), "light_min": round(n.light, 1), "rem_min": round(n.rem, 1),
+        "awake_min": round(n.awake, 1),
+        "efficiency_pct": round(n.efficiency, 1) if n.efficiency is not None else None,
+        "segments": n.segments,
+    }
+
+
+def _daily(activity, hr, spo2, stress, nights, naps):
     days: dict[str, dict] = defaultdict(lambda: defaultdict(list))
     for a in activity:
         d = days[a["time"][:10]]
@@ -229,15 +251,16 @@ def _daily(activity, hr, spo2, stress, sessions):
             v = r[key]
             if v and 0 < v < 255:
                 days[r["time"][:10]][name].append(v)
-    sleep_by_day = {}
-    for s in sessions:  # attribute a night to the day you woke up
-        sleep_by_day.setdefault(s["woke_up"][:10], []).append(s)
+    sleep_by_day = {n["night_of"]: n for n in nights}
+    nap_by_day: dict[str, float] = {}
+    for n in naps:
+        nap_by_day[n["night_of"]] = nap_by_day.get(n["night_of"], 0) + n["asleep_min"]
 
     out = []
-    for day in sorted(set(days) | set(sleep_by_day)):
+    for day in sorted(set(days) | set(sleep_by_day) | set(nap_by_day)):
         d = days[day]
         avg = lambda xs: round(sum(xs) / len(xs), 1) if xs else None
-        sl = sleep_by_day.get(day, [])
+        n = sleep_by_day.get(day)
         out.append({
             "date": day,
             "steps": sum(d["steps"]),
@@ -246,11 +269,12 @@ def _daily(activity, hr, spo2, stress, sessions):
             "hr_avg": avg(d["hr"]), "hr_min": min(d["hr"], default=None), "hr_max": max(d["hr"], default=None),
             "spo2_avg": avg(d["spo2"]), "spo2_min": min(d["spo2"], default=None),
             "stress_avg": avg(d["stress"]), "stress_max": max(d["stress"], default=None),
-            "sleep_min": round(sum(s["asleep_min"] for s in sl), 1) if sl else None,
-            "deep_min": round(sum(s["deep_min"] for s in sl), 1) if sl else None,
-            "light_min": round(sum(s["light_min"] for s in sl), 1) if sl else None,
-            "rem_min": round(sum(s["rem_min"] for s in sl), 1) if sl else None,
-            "awake_min": round(sum(s["awake_min"] for s in sl), 1) if sl else None,
+            "sleep_min": n["asleep_min"] if n else None,
+            "deep_min": n["deep_min"] if n else None,
+            "light_min": n["light_min"] if n else None,
+            "rem_min": n["rem_min"] if n else None,
+            "awake_min": n["awake_min"] if n else None,
+            "nap_min": round(nap_by_day[day], 1) if day in nap_by_day else None,
         })
     return out
 
@@ -266,7 +290,10 @@ def export(db_path, out_dir, device_filter: str | None = None, dump_raw: bool = 
     sessions, stages = _sleep(con, ids)
     gps = _gps(con, ids)
     workouts = _workouts(con, ids, gps)
-    daily = _daily(activity, simple["heart_rate"], simple["spo2"], simple["stress"], sessions)
+    night_objs, nap_objs = sleeplib.group([_as_session(x) for x in sessions])
+    nights = [_night_row(n) for n in night_objs]
+    naps = [_night_row(n) for n in nap_objs]
+    daily = _daily(activity, simple["heart_rate"], simple["spo2"], simple["stress"], nights, naps)
 
     counts = {
         "activity_minutes": write_csv(out / "activity.csv", activity),
@@ -275,6 +302,8 @@ def export(db_path, out_dir, device_filter: str | None = None, dump_raw: bool = 
         "stress": write_csv(out / "stress.csv", simple["stress"]),
         "sleep_sessions": write_csv(out / "sleep_sessions.csv", sessions),
         "sleep_stages": write_csv(out / "sleep_stages.csv", stages),
+        "nights": write_csv(out / "sleep_nights.csv", nights),
+        "naps": write_csv(out / "naps.csv", naps),
         "gps_points": write_csv(out / "workout_gps.csv", gps),
         "battery": write_csv(out / "battery.csv", _battery(con, ids)),
         "workouts": write_csv(out / "workouts.csv",
@@ -297,6 +326,8 @@ def export(db_path, out_dir, device_filter: str | None = None, dump_raw: bool = 
         "source": "gadgetbridge",
         "devices": list(devices.values()),
         "daily_summary": daily,
+        "sleep_nights": nights,
+        "naps": naps,
         "sleep_sessions": sessions,
         "sleep_stages": stages,
         "workouts": workouts,
@@ -305,7 +336,7 @@ def export(db_path, out_dir, device_filter: str | None = None, dump_raw: bool = 
         "stress": simple["stress"],
         "activity": activity,
     })
-    return {"devices": list(devices.values()), "counts": counts, "sessions": sessions, "daily": daily}
+    return {"devices": list(devices.values()), "counts": counts, "sessions": nights, "naps": naps, "daily": daily}
 
 
 def print_summary(res: dict) -> None:

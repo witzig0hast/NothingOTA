@@ -7,6 +7,8 @@ import threading
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from cmfexport import sleep as sleeplib
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily (
     date TEXT PRIMARY KEY,
@@ -187,14 +189,26 @@ class Store:
         attrs: dict[str, dict] = {}
         with self.lock:
             q = self.con.execute
-            night = q("SELECT * FROM sleep ORDER BY end_ts DESC LIMIT 1").fetchone()
-            if night:
-                s.update(sleep_duration=night["asleep_min"], sleep_deep=night["deep_min"],
-                         sleep_light=night["light_min"], sleep_rem=night["rem_min"],
-                         sleep_awake=night["awake_min"], sleep_efficiency=night["efficiency_pct"],
-                         sleep_start=night["start"], sleep_end=night["end"],
-                         sleep_in_bed=night["in_bed_min"])
-                attrs["sleep_duration"] = {k: night[k] for k in night.keys()}
+            nights, naps = self.sleep_grouped(days=10)
+            if nights:
+                n = nights[-1]
+                s.update(sleep_duration=round(n.asleep, 1), sleep_deep=round(n.deep, 1),
+                         sleep_light=round(n.light, 1), sleep_rem=round(n.rem, 1),
+                         sleep_awake=round(n.awake, 1),
+                         sleep_efficiency=round(n.efficiency, 1) if n.efficiency is not None else None,
+                         sleep_start=n.start.isoformat(), sleep_end=n.end.isoformat(),
+                         sleep_in_bed=round(n.in_bed, 1))
+                attrs["sleep_duration"] = {"night_of": sleeplib.day_of(n).isoformat(), "segments": n.segments,
+                                           "start": n.start.isoformat(), "end": n.end.isoformat()}
+                week = [x for x in nights if (today - sleeplib.day_of(x)).days < 7]
+                if week:
+                    s["sleep_avg_7d"] = round(sum(x.asleep for x in week) / len(week), 1)
+                    attrs["sleep_avg_7d"] = {"nights": len(week)}
+            todays = [x for x in naps if x.start.astimezone().date() == today]
+            s["nap_today"] = round(sum(x.asleep for x in todays), 1)
+            if todays:
+                attrs["nap_today"] = {"naps": [{"start": x.start.isoformat(), "end": x.end.isoformat(),
+                                                "minutes": round(x.asleep, 1)} for x in todays]}
 
             d = q("SELECT * FROM daily WHERE date = ?", (today.isoformat(),)).fetchone()
             s["steps_today"] = (d["steps"] if d and d["steps"] is not None else 0)
@@ -239,8 +253,31 @@ class Store:
                 attrs["last_upload"] = {"file": up["name"], "kind": up["kind"], "summary": up["summary"]}
         return {"state": {k: v for k, v in s.items() if v is not None}, "attributes": attrs}
 
+    def sleep_grouped(self, days: int | None = None):
+        """Stored sleep sessions -> (nights, naps), see cmfexport.sleep."""
+        sql, args = "SELECT * FROM sleep", ()
+        if days is not None:  # window before the newest stored session (works after a sync pause, too)
+            newest = self.con.execute("SELECT MAX(end_ts) FROM sleep").fetchone()[0] or 0
+            sql, args = sql + " WHERE end_ts >= ?", (newest - days * 86400,)
+        rows = self.con.execute(sql + " ORDER BY start_ts", args).fetchall()
+        sessions = []
+        for r in rows:
+            deep, light, rem = (r["deep_min"] or 0), (r["light_min"] or 0), (r["rem_min"] or 0)
+            sessions.append(sleeplib.Session(
+                datetime.fromtimestamp(r["start_ts"], timezone.utc), datetime.fromtimestamp(r["end_ts"], timezone.utc),
+                deep, light, rem, r["awake_min"] or 0, has_stages=(deep + light + rem) > 0, source=r["source"]))
+        return sleeplib.group(sessions)
+
     def history(self, metric: str, since_ts: int) -> list[dict]:
         with self.lock:
+            if metric == "nights":
+                nights, naps = self.sleep_grouped()
+                cutoff = datetime.fromtimestamp(since_ts, timezone.utc)
+                return [{"night_of": (n.start.astimezone().date() if n.nap else sleeplib.day_of(n)).isoformat(),
+                         "type": "nap" if n.nap else "night", "start": n.start.isoformat(), "end": n.end.isoformat(),
+                         "asleep_min": round(n.asleep, 1), "deep_min": n.deep, "light_min": n.light, "rem_min": n.rem,
+                         "awake_min": round(n.awake, 1), "segments": n.segments}
+                        for n in sorted(nights + naps, key=lambda x: x.start) if n.end >= cutoff]
             if metric == "sleep":
                 rows = self.con.execute("SELECT * FROM sleep WHERE end_ts >= ? ORDER BY start_ts", (since_ts,))
             elif metric == "daily":
