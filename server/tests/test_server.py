@@ -106,7 +106,8 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     st = res["state"]
     assert st["sleep_deep"] == 60 and st["sleep_rem"] == 20 and st["stress"] == 23 and st["spo2"] == 97
     assert st["last_workout"] == "OUTDOOR_RUNNING"
-    assert st["watch_battery"] == 77
+    assert "watch_battery" not in st  # test data is from 2025: stale battery values are not published
+    assert [h["value"] for h in req(base + "/api/history?metric=battery&days=36500")[1]] == [81, 77]
     hist = req(base + "/api/history?metric=heart_rate&days=36500")[1]
     assert [h["value"] for h in hist] == [58]
 

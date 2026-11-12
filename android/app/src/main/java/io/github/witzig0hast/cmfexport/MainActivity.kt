@@ -51,9 +51,6 @@ class MainActivity : AppCompatActivity() {
         val missing = HealthConnectExporter.PERMISSIONS - granted
         snack("Health Connect: ${granted.size} Freigaben" + if (missing.isNotEmpty()) " · ${missing.size} fehlen" else " ✓")
     }
-    private val btPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (!ok) snack("Ohne Bluetooth-Freigabe kann der Uhr-Akku nicht gelesen werden")
-    }
     private val pickDb = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         // Keep access so the background sync can re-read Gadgetbridge's auto-export file later.
@@ -107,13 +104,13 @@ class MainActivity : AppCompatActivity() {
                 if (on && !settings.configured) { sw.isChecked = false; snack("Bitte zuerst die Server-Adresse eintragen"); return@setOnCheckedChangeListener }
                 settings.autoSync = on
                 SyncWorker.schedule(this@MainActivity, on)
-                if (on) { askBluetooth(); hcClient()?.let { hcPermissions.launch(HealthConnectExporter.PERMISSIONS + HealthConnectExporter.BACKGROUND) } }
+                if (on) { hcClient()?.let { hcPermissions.launch(HealthConnectExporter.PERMISSIONS + HealthConnectExporter.BACKGROUND) } }
                 renderServer()
             }
         }
         v<View>(R.id.testButton).also { busy += it }.setOnClickListener { saveServer(); background("Verbindung") { Uploader(settings).test() } }
-        v<View>(R.id.sendButton).also { busy += it }.setOnClickListener { saveServer(); askBluetooth(); sync() }
-        v<View>(R.id.refreshButton).also { busy += it }.setOnClickListener { saveServer(); askBluetooth(); sync() }
+        v<View>(R.id.sendButton).also { busy += it }.setOnClickListener { saveServer(); sync() }
+        v<View>(R.id.refreshButton).also { busy += it }.setOnClickListener { saveServer(); sync() }
 
         v<MaterialSwitch>(R.id.onlyCmf).apply { isChecked = settings.onlyCmf; setOnCheckedChangeListener { _, c -> settings.onlyCmf = c } }
         v<View>(R.id.hcPermButton).setOnClickListener { hcClient()?.let { hcPermissions.launch(HealthConnectExporter.PERMISSIONS) } }
@@ -181,7 +178,7 @@ class MainActivity : AppCompatActivity() {
         v<TextView>(R.id.hrValue).text = d.hr?.let { "$it" } ?: "–"
         v<TextView>(R.id.hrSub).text = d.hr?.let { "bpm · ${ago(d.hrTime)}" } ?: ""
         v<TextView>(R.id.batteryValue).text = d.battery?.let { "$it %" } ?: "–"
-        v<TextView>(R.id.batterySub).text = d.batteryTime?.let { ago(it) } ?: "über Bluetooth/Gadgetbridge"
+        v<TextView>(R.id.batterySub).text = d.batteryTime?.let { ago(it) } ?: "nur mit Gadgetbridge"
 
         val lastSync = runCatching { java.time.OffsetDateTime.parse(settings.lastSync).toInstant() }.getOrNull()
         val fresh = lastSync != null && Duration.between(lastSync, Instant.now()).toMinutes() < settings.intervalMin * 3
@@ -224,10 +221,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // --- actions -----------------------------------------------------------------------------
-    private fun askBluetooth() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !WatchBattery.hasPermission(this)) btPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
-    }
-
     private fun sync() {
         setBusy(true)
         lifecycleScope.launch {

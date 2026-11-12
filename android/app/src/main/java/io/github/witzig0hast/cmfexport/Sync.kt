@@ -45,7 +45,14 @@ class Settings(ctx: Context) {
         get() = p.getString("gb_sig", null)
         set(v) = p.edit().putString("gb_sig", v).apply()
     var dashboard: Dashboard
-        get() = Dashboard.fromJson(p.getString("dashboard", null))
+        get() {
+            // v1.2 showed a wrong Bluetooth battery value (the CMF watch reports a fixed 100 %): drop it once
+            if (!p.getBoolean("battery_fix_v13", false)) {
+                val d = Dashboard.fromJson(p.getString("dashboard", null))
+                p.edit().putString("dashboard", d.copy(battery = null, batteryTime = null).toJson()).putBoolean("battery_fix_v13", true).apply()
+            }
+            return Dashboard.fromJson(p.getString("dashboard", null))
+        }
         set(v) = p.edit().putString("dashboard", v.toJson()).apply()
     var lastSync: String
         get() = p.getString("last_sync", "") ?: ""
@@ -127,8 +134,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         }.getOrNull()
 
         /**
-         * One sync run (worker and "Jetzt synchronisieren"): watch battery over Bluetooth,
-         * Health Connect (last [SYNC_DAYS] days) and the Gadgetbridge file if it changed.
+         * One sync run (worker and "Jetzt synchronisieren"): Health Connect (last [SYNC_DAYS] days) and the Gadgetbridge file if it changed.
          * Updates the start-screen dashboard; uploads when a server is configured.
          */
         suspend fun syncOnce(ctx: Context, log: (String) -> Unit): Boolean {
@@ -143,12 +149,6 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                 if (up == null) return
                 try { log("$what → Server: ${block()}"); ok = true }
                 catch (e: IOException) { log("$what Upload: ${e.message}"); networkError = true }
-            }
-
-            WatchBattery.read(ctx, log)?.let { r ->
-                log("Uhr-Akku: ${r.level} % (${r.method})")
-                dash = dash.merge(Dashboard(battery = r.level, batteryTime = r.time))
-                upload("Akku") { up!!.upload(WatchBattery.zip(r, File(dir, "battery.zip"))) }
             }
 
             if (HealthConnectClient.getSdkStatus(ctx) == HealthConnectClient.SDK_AVAILABLE) {

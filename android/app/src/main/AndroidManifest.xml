@@ -20,10 +20,6 @@
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
     <!-- only used to send data to your own server (Home Assistant bridge) -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- watch battery via Bluetooth (read only) -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

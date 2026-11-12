@@ -227,7 +227,9 @@ class Store:
                                 ("resting_hr", "resting_heart_rate"), ("hrv", "hrv"),
                                 ("respiratory_rate", "respiratory_rate"), ("weight", "weight"),
                                 ("battery", "watch_battery")):
-                row = q("SELECT time, value FROM sample WHERE metric = ? ORDER BY ts DESC LIMIT 1", (metric,)).fetchone()
+                row = q("SELECT ts, time, value FROM sample WHERE metric = ? ORDER BY ts DESC LIMIT 1", (metric,)).fetchone()
+                if row and metric == "battery" and row["ts"] < datetime.now(timezone.utc).timestamp() - 2 * 86400:
+                    continue  # a battery level older than 2 days is misleading
                 if row:
                     s[key] = row["value"]
                     attrs[key] = {"measured_at": row["time"]}
