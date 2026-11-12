@@ -1,8 +1,8 @@
 # cmfexport – alle Daten aus der Nothing CMF Watch Pro 3 holen
 
 > **Neu:** [`server/`](server/README.md) ist ein Docker-Backend, das die Daten automatisch an
-> **Home Assistant** weitergibt (MQTT Discovery, 25 Sensoren: Schlafphasen, Puls, SpO2, Stress, Schritte …).
-> Die App lädt dafür alle 6 Stunden im Hintergrund hoch.
+> **Home Assistant** weitergibt (MQTT Discovery, 29 Sensoren: Schlafphasen, Puls, SpO2, Stress, Schritte, Uhr-Akku, Trainings …).
+> Die App lädt dafür alle 15 Minuten (einstellbar) im Hintergrund hoch.
 
 Die offizielle CMF-Watch-App hat **keinen Export-Knopf**. Es gibt aber drei Wege an die
 Rohdaten (Schlafphasen, Puls, SpO2, Stress, Schritte, Distanz, Kalorien, Workouts inkl. GPS).
@@ -24,7 +24,10 @@ aus Weg A und B in saubere CSV/JSON/GPX-Dateien plus einen HTML-Bericht umwandel
 
 Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.2.apk`](dist/CMF-Export-1.2.apk)**
 (Android 8+, ca. 3 MB). Daten verlassen das Handy nur, wenn du die ZIP teilst oder unter
-„C · Home Assistant“ deinen eigenen [cmfserver](server/README.md) einträgst.
+„Home Assistant“ deinen eigenen [cmfserver](server/README.md) einträgst.
+
+Neu in 1.2: Startseite mit letzter Nacht, Schritten, Puls und Uhr-Akku, helles und dunkles Design,
+Senden an Home Assistant alle 15 Minuten (einstellbar bis 6 Stunden).
 
 1. APK aufs Handy laden und öffnen → „Installation aus unbekannten Quellen“ für Browser/Dateimanager erlauben.
 2. **Health Connect (Weg B, ohne Export-ZIP):** in der CMF-Watch-App Health-Connect-Sync aktivieren →
@@ -41,6 +44,45 @@ Selbst bauen (JDK 17+, Android SDK 36): `cd android && ./gradlew testReleaseUnit
 (`.github/workflows/android.yml`) die APK und hängt sie als Artefakt an. Die APK ist mit einem festen,
 nicht geheimen Schlüssel signiert (`android/app/cmfexport.keystore`, Passwort `android`), damit neue
 Versionen sich über alte installieren lassen.
+
+## CMF Track – Aktivitäten aufzeichnen (zweite App)
+
+**[`dist/CMF-Track-1.0.apk`](dist/CMF-Track-1.0.apk)** ist ein eigenständiger Aktivitäts-Tracker: Die Strecke
+kommt per GPS vom Handy, der Puls von der Uhr.
+
+- **Sportarten:** Laufen, Gehen, Wandern, Radfahren, Inlineskaten, Sonstiges
+- **Live-Werte:** Zeit, Distanz, aktuelles und Ø-Tempo (oder km/h), Puls, Höhenmeter, Schrittfrequenz,
+  GPS-Genauigkeit, km-Splits, Route; dazu eine Benachrichtigung mit den Werten
+- **Genauigkeit:** GPS-Kalman-Filter mit Geschwindigkeitsmodell, Distanz aus der Doppler-Geschwindigkeit des GPS,
+  Sprung- und Ungenauigkeitsfilter, Auto-Pause mit Bestätigung in beide Richtungen, Höhenmeter per Barometer
+  (sonst geglättete GPS-Höhe). In den Tests mit verrauschtem GPS: 5 km auf 0,07 % genau,
+  3-km-Runde auf 0,06 %, Bewegungszeit auf ±1 s, keine Phantomstrecke im Stand.
+- **Puls von der Uhr:** live über Bluetooth von jedem Gerät, das den Standard-Herzfrequenzdienst sendet (Brustgurt,
+  Uhr im Puls-Übertragungsmodus). Sonst lädt die App nach dem Training automatisch die Pulswerte,
+  die die CMF-App in Health Connect gespeichert hat, und rechnet Ø/Max-Puls, Kalorien (Keytel-Formel),
+  Pulszonen und Splits neu.
+- **Auswertung:** Route nach Tempo eingefärbt, Tempo-, Höhen- und Pulsdiagramm, Pulszonen, km-Splits mit Puls
+  und Höhe
+- **Export:** TCX (mit Puls, lässt sich in Strava, Garmin Connect und Runalyze hochladen) und GPX.
+  Optional geht jedes Training automatisch an den cmfserver; in Home Assistant erscheinen dann
+  „Letztes Training“, Distanz, Dauer und Ø-Puls.
+
+Beide Apps sind mit demselben Schlüssel signiert, laufen aber unabhängig voneinander.
+
+## Wichtig: Warum Schlafdaten auf der Uhr „verschwinden“
+
+CMF Export **liest nur**: Es hat ausschließlich Lese-Berechtigungen für Health Connect und öffnet die
+Gadgetbridge-Datei schreibgeschützt. Es kann auf der Uhr nichts löschen.
+
+Die Uhr selbst löscht aber Daten, sobald eine App sie abgeholt und den Empfang bestätigt hat. Das tun
+**Gadgetbridge und die CMF-App gleichermaßen**. Ist die Uhr abwechselnd mit beiden verbunden, bekommt
+jede App nur einen Teil der Nächte. Deshalb:
+
+- **Nur eine App** mit der Uhr verbinden. Entweder die CMF-App (dann holt CMF Export die Daten aus
+  Health Connect) oder Gadgetbridge (dann aus der Gadgetbridge-Datei).
+- Mit der CMF-App: Prüfe in Health Connect unter *App-Berechtigungen → CMF Watch*, ob „Schlaf“
+  **schreiben** erlaubt ist. Fehlt das, landen keine Schlafdaten in Health Connect. Im Protokoll von
+  CMF Export siehst du, welche App wie viele Datensätze geliefert hat.
 
 ## Weg A – Gadgetbridge (Open Source, direkt per Bluetooth)
 

@@ -2,7 +2,7 @@
 
 Kleiner Docker-Container, der die Daten deiner CMF Watch Pro 3 annimmt, in einer SQLite-Datenbank
 zusammenführt und an **Home Assistant** weitergibt. Bei MQTT legt Home Assistant über MQTT Discovery
-automatisch ein Gerät „CMF Watch Pro 3“ mit 25 Sensoren an. Alternativ geht es über die REST-API.
+automatisch ein Gerät „CMF Watch Pro 3“ mit 29 Sensoren an. Alternativ geht es über die REST-API.
 
 ```
 CMF Watch ──BT──> CMF-App ──> Health Connect ─┐
@@ -21,7 +21,8 @@ CMF Watch ──BT──> Gadgetbridge ── Auto-Export ┘                   
 | Schritte heute / gestern, Distanz heute, Kalorien heute | `sensor.cmf_watch_pro_3_schritte_heute` | steps, m, kcal |
 | Puls (letzter Wert), Puls Ø/min/max heute, Ruhepuls, HRV | `sensor.cmf_watch_pro_3_puls` | bpm, ms |
 | Blutsauerstoff, Stress, Atemfrequenz, Gewicht | `sensor.cmf_watch_pro_3_blutsauerstoff` | %, –, /min, kg |
-| Letztes Training, Letzte Synchronisierung | `sensor.cmf_watch_pro_3_letztes_training` | – |
+| Akku Uhr | `sensor.cmf_watch_pro_3_akku_uhr` | % |
+| Letztes Training (+ Distanz, Dauer, Ø Puls), Letzte Synchronisierung | `sensor.cmf_watch_pro_3_letztes_training` | km, min, bpm |
 
 Jeder Sensor hat Attribute, z. B. `measured_at` beim Puls oder alle Schlafphasen beim Schlafsensor.
 Home Assistant speichert den Verlauf selbst, so bekommst du Langzeit-Statistiken und Graphen.
@@ -48,9 +49,9 @@ Er liegt aber im Server und ist über `/api/history` abrufbar.
    ```
 4. Im Browser `http://<server>:8080/?token=<API_TOKEN>` öffnen. Dort siehst du die Statusseite und kannst
    Dateien hochladen.
-5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.2.apk`) unter **C · Home Assistant** die
+5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.2.apk`) auf der Karte **Home Assistant** die
    Server-Adresse und das Token eintragen, dann „Verbindung testen“ und
-   „Automatisch alle 6 Stunden synchronisieren“ antippen. Dabei auch „Im Hintergrund lesen“ in
+   „Automatisch senden“ einschalten (Häufigkeit: Standard 15 Minuten). Dabei auch „Im Hintergrund lesen“ in
    Health Connect erlauben.
 
 Danach erscheint in Home Assistant unter *Einstellungen → Geräte & Dienste → MQTT* das Gerät
@@ -60,7 +61,8 @@ Danach erscheint in Home Assistant unter *Einstellungen → Geräte & Dienste �
 
 | Weg | Wie |
 |---|---|
-| **App, automatisch** | Die App liest alle 6 h die letzten 3 Tage aus Health Connect und lädt sie hoch. Hast du unter B eine Gadgetbridge-Datei gewählt, schickt sie auch diese mit. |
+| **App, automatisch** | CMF Export liest alle 15 min (einstellbar) den Uhr-Akku per Bluetooth und die letzten 2 Tage aus Health Connect und lädt sie hoch. Hast du eine Gadgetbridge-Datei gewählt, wird sie mitgeschickt, aber nur wenn sie sich geändert hat. |
+| **CMF Track** | Nach jedem Training automatisch: Sportart, Distanz, Dauer, Puls, Höhenmeter, Kalorien |
 | **App, manuell** | Nach jedem Export „An Server senden“ oder „Jetzt synchronisieren“ |
 | **Import-Ordner** | Jede Datei in `/import` (Gadgetbridge-DB/-ZIP oder Export-ZIP) wird automatisch eingelesen. Ideal mit **Gadgetbridge → Einstellungen → Automatischer Export** in einen Ordner, den **Syncthing** oder Nextcloud auf den Server spiegelt. |
 | **HTTP** | `curl -H "Authorization: Bearer $TOKEN" --data-binary @Gadgetbridge.db http://server:8080/api/upload` |

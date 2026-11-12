@@ -49,6 +49,9 @@ SENSORS = [
     Sensor("weight", "Gewicht", "kg", "weight", "measurement", "mdi:scale-bathroom"),
     Sensor("watch_battery", "Akku Uhr", "%", "battery", "measurement", None),
     Sensor("last_workout", "Letztes Training", None, None, None, "mdi:run"),
+    Sensor("last_workout_distance", "Letztes Training Distanz", "km", "distance", None, "mdi:map-marker-distance"),
+    Sensor("last_workout_duration", "Letztes Training Dauer", "min", "duration", None, "mdi:timer-outline"),
+    Sensor("last_workout_avg_hr", "Letztes Training Ø Puls", "bpm", None, None, "mdi:heart-pulse"),
     Sensor("last_upload", "Letzte Synchronisierung", None, "timestamp", None, "mdi:cloud-upload"),
 ]
 

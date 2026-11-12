@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS upload (
 );
 """
 
+WORKOUT_EXTRA = {"distance_km": "REAL", "avg_hr": "INTEGER", "max_hr": "INTEGER",
+                 "elevation_gain_m": "REAL", "calories": "REAL"}
+
 DAILY_COLS = ["steps", "distance_m", "calories_kcal", "hr_avg", "hr_min", "hr_max", "resting_hr",
               "spo2_avg", "stress_avg", "sleep_min", "deep_min", "light_min", "rem_min", "awake_min"]
 # columns that only ever grow during a day -> keep the larger value when merging
@@ -85,6 +88,12 @@ class Store:
         self.con = sqlite3.connect(path, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
         self.con.executescript(SCHEMA)
+        # migrations for databases created by older versions
+        have = {r[1] for r in self.con.execute("PRAGMA table_info(workout)")}
+        for col, typ in WORKOUT_EXTRA.items():
+            if col not in have:
+                self.con.execute(f"ALTER TABLE workout ADD COLUMN {col} {typ}")
+        self.con.commit()
 
     # ------------------------------------------------------------------ ingest
     def ingest_dir(self, d: Path, *, windowed: bool, name: str, kind: str) -> dict:
@@ -162,9 +171,12 @@ class Store:
                 continue
             wtype = r.get("workout_type") or r.get("title") or (
                 f"exercise_{r['exercise_type']}" if r.get("exercise_type") else None)
-            self.con.execute("INSERT OR REPLACE INTO workout VALUES (?,?,?,?,?,?)",
-                             (int(start.timestamp()), start.isoformat(), r.get("end"),
-                              num(r.get("duration_min")), wtype, r.get("app")))
+            extra = {k: num(r.get(k)) for k in WORKOUT_EXTRA}
+            self.con.execute(
+                f"INSERT OR REPLACE INTO workout (start_ts, start, end, duration_min, type, source, {', '.join(extra)}) "
+                f"VALUES (?,?,?,?,?,?{', ?' * len(extra)})",
+                (int(start.timestamp()), start.isoformat(), r.get("end"), num(r.get("duration_min")), wtype,
+                 r.get("app"), *extra.values()))
             n += 1
         return n
 
@@ -214,7 +226,12 @@ class Store:
             w = q("SELECT * FROM workout ORDER BY start_ts DESC LIMIT 1").fetchone()
             if w:
                 s["last_workout"] = w["type"] or "workout"
-                attrs["last_workout"] = {k: w[k] for k in w.keys()}
+                attrs["last_workout"] = {k: w[k] for k in w.keys() if w[k] is not None}
+                for key, col in (("last_workout_distance", "distance_km"), ("last_workout_duration", "duration_min"),
+                                 ("last_workout_avg_hr", "avg_hr")):
+                    if w[col] is not None:
+                        s[key] = w[col]
+                        attrs[key] = {"start": w["start"], "type": w["type"]}
 
             up = q("SELECT * FROM upload ORDER BY id DESC LIMIT 1").fetchone()
             if up:

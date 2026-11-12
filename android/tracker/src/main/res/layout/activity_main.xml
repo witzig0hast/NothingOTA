@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- ============ Aufnahme ============ -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/pageRecord"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="4dp"
+                    android:paddingTop="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="CMF Track"
+                        android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
+                        android:textStyle="bold" />
+
+                    <View android:id="@+id/gpsDot" android:layout_width="10dp" android:layout_height="10dp" android:layout_marginEnd="6dp" android:background="@drawable/dot" />
+                    <TextView android:id="@+id/gpsText" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="GPS" android:textSize="12sp" />
+                </LinearLayout>
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/sportChips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:selectionRequired="true"
+                    app:singleSelection="true" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView android:id="@+id/stateLabel" style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bereit" />
+                        <TextView android:id="@+id/timeValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0:00" android:textAppearance="@style/Huge" />
+
+                        <GridLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:columnCount="2">
+
+                            <LinearLayout android:layout_columnWeight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                                <TextView style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Distanz km" />
+                                <TextView android:id="@+id/distValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0.00" android:textAppearance="@style/Metric" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_columnWeight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                                <TextView android:id="@+id/speedLabel" style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tempo /km" />
+                                <TextView android:id="@+id/speedValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="–:––" android:textAppearance="@style/Metric" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_columnWeight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                                <TextView style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Puls" />
+                                <TextView android:id="@+id/hrValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="–" android:textAppearance="@style/Metric" android:textColor="@color/brand" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_columnWeight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                                <TextView android:id="@+id/avgLabel" style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ø Tempo" />
+                                <TextView android:id="@+id/avgValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="–:––" android:textAppearance="@style/Metric" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_columnWeight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                                <TextView style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Höhenmeter" />
+                                <TextView android:id="@+id/elevValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textAppearance="@style/Metric" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_columnWeight="1" android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:paddingVertical="8dp">
+                                <TextView style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Schritte/min" />
+                                <TextView android:id="@+id/cadValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="–" android:textAppearance="@style/Metric" />
+                            </LinearLayout>
+                        </GridLayout>
+
+                        <TextView android:id="@+id/splitText" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" />
+                        <TextView android:id="@+id/hrStatus" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/liveRouteCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone">
+
+                    <io.github.witzig0hast.cmftrack.RouteView
+                        android:id="@+id/liveRoute"
+                        android:layout_width="match_parent"
+                        android:layout_height="220dp" />
+                </com.google.android.material.card.MaterialCardView>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/stopButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="64dp"
+                        android:layout_marginEnd="12dp"
+                        android:text="Beenden"
+                        android:visibility="gone"
+                        app:icon="@drawable/ic_stop" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/mainButton"
+                        android:layout_width="0dp"
+                        android:layout_height="64dp"
+                        android:layout_weight="1"
+                        android:text="Start"
+                        android:textSize="18sp"
+                        app:icon="@drawable/ic_play" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:text="„Beenden“ lange drücken · Auto-Pause bei Stillstand"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- ============ Verlauf ============ -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/pageHistory"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingHorizontal="4dp" android:text="Verlauf" android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium" android:textStyle="bold" />
+                <TextView android:id="@+id/totals" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingHorizontal="4dp" android:paddingBottom="8dp" />
+                <LinearLayout android:id="@+id/historyList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- ============ Profil ============ -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/pageProfile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingHorizontal="4dp" android:paddingBottom="8dp" android:text="Profil" android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium" android:textStyle="bold" />
+
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Für Kalorien &amp; Pulszonen" />
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                            <com.google.android.material.textfield.TextInputLayout style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:hint="Gewicht kg">
+                                <com.google.android.material.textfield.TextInputEditText android:id="@+id/weightInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="numberDecimal" />
+                            </com.google.android.material.textfield.TextInputLayout>
+                            <com.google.android.material.textfield.TextInputLayout style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:hint="Alter">
+                                <com.google.android.material.textfield.TextInputEditText android:id="@+id/ageInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" />
+                            </com.google.android.material.textfield.TextInputLayout>
+                            <com.google.android.material.textfield.TextInputLayout style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="HFmax">
+                                <com.google.android.material.textfield.TextInputEditText android:id="@+id/maxHrInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" />
+                            </com.google.android.material.textfield.TextInputLayout>
+                        </LinearLayout>
+                        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/femaleSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Weiblich (Kalorienformel)" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Puls von der Uhr" />
+                        <TextView style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                            android:text="Live: über Bluetooth von jedem Gerät, das Puls sendet (Uhr im Puls-Übertragungsmodus, Brustgurt). Danach: CMF Track lädt automatisch die Pulswerte, die deine Uhr über die CMF-App in Health Connect gespeichert hat." />
+                        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/liveHrSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Live-Puls per Bluetooth suchen" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/hcButton" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Health Connect: Puls lesen erlauben" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Home Assistant" />
+                        <TextView style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="Trainings an deinen cmfserver senden (Sensor „Letztes Training“)." />
+                        <com.google.android.material.textfield.TextInputLayout style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="Server-Adresse" app:placeholderText="http://192.168.1.10:8080">
+                            <com.google.android.material.textfield.TextInputEditText android:id="@+id/serverInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textUri" android:singleLine="true" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                        <com.google.android.material.textfield.TextInputLayout style="@style/Widget.Material3.TextInputLayout.OutlinedBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:hint="API-Token" app:endIconMode="password_toggle">
+                            <com.google.android.material.textfield.TextInputEditText android:id="@+id/tokenInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPassword" android:singleLine="true" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                        <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/autoUploadSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Nach jedem Training automatisch senden" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </FrameLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/nav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/surface"
+        app:menu="@menu/nav" />
+</LinearLayout>

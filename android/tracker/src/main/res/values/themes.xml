@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CmfTrack" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">@color/primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/on_primary_container</item>
+        <item name="colorSecondaryContainer">@color/surface_variant</item>
+        <item name="colorOnSecondaryContainer">@color/on_surface</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceContainerHighest">@color/surface_variant</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/muted</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">@bool/light_bars</item>
+        <item name="materialCardViewStyle">@style/Card</item>
+    </style>
+
+    <style name="Card" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">@color/surface</item>
+        <item name="cardCornerRadius">24dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="contentPadding">20dp</item>
+    </style>
+
+    <style name="Label" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+    <style name="BigNumber" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="android:fontFamily">sans-serif-light</item>
+        <item name="android:textColor">@color/on_surface</item>
+    </style>
+    <style name="TileNumber" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textColor">@color/on_surface</item>
+    </style>
+    <style name="SectionTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/muted</item>
+    </style>
+    <style name="Huge" parent="TextAppearance.Material3.DisplayLarge">
+        <item name="android:fontFamily">sans-serif-light</item>
+        <item name="android:textColor">@color/on_surface</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+    <style name="Metric" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textColor">@color/on_surface</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+</resources>

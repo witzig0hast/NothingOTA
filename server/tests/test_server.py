@@ -131,6 +131,33 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     assert any(u["name"] == "gb.zip" for u in svc.store.uploads())
 
 
+def test_tracker_workout_zip(server, tmp_path):
+    """Upload format of the CMF Track app (workouts.csv with distance/heart rate + heart_rate.csv)."""
+    _, _, base = server
+    z = tmp_path / "w.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("workouts.csv", "start,end,duration_min,workout_type,distance_km,avg_hr,max_hr,elevation_gain_m,calories,app\n"
+                    "2030-01-02T07:00:00+01:00,2030-01-02T07:30:00+01:00,28.5,Laufen,5.12,151,174,42,410,cmftrack\n")
+        zf.writestr("heart_rate.csv", "time,bpm\n2030-01-02T07:10:00+01:00,150\n")
+    code, res = req(base + "/api/upload", z.read_bytes())
+    assert code == 200, res
+    st = res["state"]
+    assert st["last_workout"] == "Laufen" and st["last_workout_distance"] == 5.12
+    assert st["last_workout_duration"] == 28.5 and st["last_workout_avg_hr"] == 151
+
+
+def test_old_database_is_migrated(tmp_path):
+    import sqlite3 as sq
+    from cmfserver.store import Store
+    db = tmp_path / "old.db"
+    c = sq.connect(db)
+    c.execute("CREATE TABLE workout (start_ts INTEGER PRIMARY KEY, start TEXT, end TEXT, duration_min REAL, type TEXT, source TEXT)")
+    c.commit(); c.close()
+    Store(db)
+    cols = {r[1] for r in sq.connect(db).execute("PRAGMA table_info(workout)")}
+    assert {"distance_km", "avg_hr"} <= cols
+
+
 def test_battery_only_zip(server, tmp_path):
     """The app sends the battery level it read over Bluetooth as a tiny ZIP."""
     _, _, base = server
