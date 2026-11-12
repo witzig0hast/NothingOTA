@@ -178,6 +178,19 @@ def _workouts(con, ids, gps_rows):
     return out
 
 
+def _battery(con, ids):
+    """Watch battery history (Gadgetbridge BATTERY_LEVEL: TIMESTAMP[s], LEVEL[%], BATTERY_INDEX)."""
+    if "BATTERY_LEVEL" not in tables(con):
+        return []
+    has_index = "BATTERY_INDEX" in columns(con, "BATTERY_LEVEL")
+    rows = []
+    for r in con.execute(f"SELECT * FROM BATTERY_LEVEL{_where(ids)} ORDER BY TIMESTAMP"):
+        if has_index and r["BATTERY_INDEX"]:
+            continue  # only the main battery
+        rows.append({"time": iso(r["TIMESTAMP"]), "level": r["LEVEL"], "device_id": r["DEVICE_ID"]})
+    return rows
+
+
 def _gps(con, ids):
     if "CMF_WORKOUT_GPS_SAMPLE" not in tables(con):
         return []
@@ -263,6 +276,7 @@ def export(db_path, out_dir, device_filter: str | None = None, dump_raw: bool = 
         "sleep_sessions": write_csv(out / "sleep_sessions.csv", sessions),
         "sleep_stages": write_csv(out / "sleep_stages.csv", stages),
         "gps_points": write_csv(out / "workout_gps.csv", gps),
+        "battery": write_csv(out / "battery.csv", _battery(con, ids)),
         "workouts": write_csv(out / "workouts.csv",
                               [{k: v for k, v in w.items() if k != "gps_points"} for w in workouts]),
         "days": write_csv(out / "daily_summary.csv", daily),

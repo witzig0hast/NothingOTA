@@ -2,6 +2,7 @@ package io.github.witzig0hast.cmfexport
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.health.connect.client.HealthConnectClient
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -37,6 +38,15 @@ class Settings(ctx: Context) {
     var gadgetbridgeUri: String?
         get() = p.getString("gb_uri", null)
         set(v) = p.edit().putString("gb_uri", v).apply()
+    var intervalMin: Long
+        get() = p.getLong("interval_min", 15)
+        set(v) = p.edit().putLong("interval_min", v).apply()
+    var gadgetbridgeSignature: String?
+        get() = p.getString("gb_sig", null)
+        set(v) = p.edit().putString("gb_sig", v).apply()
+    var dashboard: Dashboard
+        get() = Dashboard.fromJson(p.getString("dashboard", null))
+        set(v) = p.edit().putString("dashboard", v.toJson()).apply()
     var lastSync: String
         get() = p.getString("last_sync", "") ?: ""
         set(v) = p.edit().putString("last_sync", v).apply()
@@ -94,56 +104,91 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
 
     companion object {
         private const val NAME = "cmf-sync"
-        const val SYNC_DAYS = 3L
+        const val SYNC_DAYS = 2L
+        /** Selectable intervals in minutes (15 = Android's minimum for periodic background work). */
+        val INTERVALS = listOf(15L, 30L, 60L, 180L, 360L)
 
-        fun schedule(ctx: Context, enabled: Boolean, hours: Long = 6) {
+        fun label(min: Long) = if (min < 60) "alle $min Minuten" else if (min == 60L) "jede Stunde" else "alle ${min / 60} Stunden"
+
+        fun schedule(ctx: Context, enabled: Boolean, minutes: Long = Settings(ctx).intervalMin) {
             val wm = WorkManager.getInstance(ctx)
             if (!enabled) { wm.cancelUniqueWork(NAME); return }
-            val req = PeriodicWorkRequestBuilder<SyncWorker>(hours, TimeUnit.HOURS, 30, TimeUnit.MINUTES)
+            val req = PeriodicWorkRequestBuilder<SyncWorker>(minutes.coerceAtLeast(15), TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             wm.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, req)
         }
 
-        /** Runs one sync now (used by the worker and the "Jetzt synchronisieren" button). */
+        /** Size + last-modified of a document, to skip re-uploading an unchanged Gadgetbridge file. */
+        private fun signature(ctx: Context, u: Uri): String? = runCatching {
+            ctx.contentResolver.query(u, arrayOf(DocumentsContract.Document.COLUMN_SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED), null, null, null)?.use { c ->
+                if (c.moveToFirst()) "${c.getLong(0)}:${if (c.isNull(1)) 0 else c.getLong(1)}" else null
+            }
+        }.getOrNull()
+
+        /**
+         * One sync run (worker and "Jetzt synchronisieren"): watch battery over Bluetooth,
+         * Health Connect (last [SYNC_DAYS] days) and the Gadgetbridge file if it changed.
+         * Updates the start-screen dashboard; uploads when a server is configured.
+         */
         suspend fun syncOnce(ctx: Context, log: (String) -> Unit): Boolean {
             val s = Settings(ctx)
-            if (!s.configured) { log("Kein Server eingestellt"); return false }
-            val up = Uploader(s)
+            val up = if (s.configured) Uploader(s) else null
             val dir = File(ctx.cacheDir, "sync").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
             var ok = false
             var networkError = false
+            var dash = s.dashboard
+
+            fun upload(what: String, block: () -> String) {
+                if (up == null) return
+                try { log("$what → Server: ${block()}"); ok = true }
+                catch (e: IOException) { log("$what Upload: ${e.message}"); networkError = true }
+            }
+
+            WatchBattery.read(ctx, log)?.let { r ->
+                log("Uhr-Akku: ${r.level} % (${r.method})")
+                dash = dash.merge(Dashboard(battery = r.level, batteryTime = r.time))
+                upload("Akku") { up!!.upload(WatchBattery.zip(r, File(dir, "battery.zip"))) }
+            }
 
             if (HealthConnectClient.getSdkStatus(ctx) == HealthConnectClient.SDK_AVAILABLE) {
                 try {
                     val f = File(dir, "cmf_healthconnect_sync.zip")
-                    HealthConnectExporter(HealthConnectClient.getOrCreate(ctx)).export(SYNC_DAYS, s.onlyCmf, f) {}
-                    log("Health Connect → Server: " + up.upload(f)); ok = true
-                } catch (e: IOException) {
-                    log("Health Connect Upload: ${e.message}"); networkError = true
+                    val res = HealthConnectExporter(HealthConnectClient.getOrCreate(ctx)).export(SYNC_DAYS, s.onlyCmf, f) {}
+                    dash = dash.merge(res.dash)
+                    upload("Health Connect") { up!!.upload(f) }
                 } catch (e: Exception) {
                     log("Health Connect: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
             s.gadgetbridgeUri?.let { uri ->
+                val u = Uri.parse(uri)
+                val sig = signature(ctx, u)
+                if (sig != null && sig == s.gadgetbridgeSignature && up != null) {
+                    log("Gadgetbridge: Datei unverändert, übersprungen"); return@let
+                }
                 try {
-                    // Send the Gadgetbridge export file as-is; the server parses it.
-                    val u = Uri.parse(uri)
-                    val len = ctx.contentResolver.openAssetFileDescriptor(u, "r")?.use { it.length } ?: -1L
-                    val f = if (len > 0) null else File(dir, "gadgetbridge.bin").also { t ->
-                        ctx.contentResolver.openInputStream(u)!!.use { i -> t.outputStream().use { i.copyTo(it) } }
+                    // Dashboard from the file, then send the file as-is (the server parses it itself).
+                    val f = File(dir, "gb.zip")
+                    dash = dash.merge(GadgetbridgeExporter(ctx).export(u, f) {}.dash)
+                    f.delete()
+                    upload("Gadgetbridge") {
+                        val len = ctx.contentResolver.openAssetFileDescriptor(u, "r")?.use { it.length } ?: -1L
+                        val res = if (len > 0) up!!.upload("Gadgetbridge", len) { ctx.contentResolver.openInputStream(u)!! }
+                        else up!!.upload(File(dir, "gadgetbridge.bin").also { t ->
+                            ctx.contentResolver.openInputStream(u)!!.use { i -> t.outputStream().use { i.copyTo(it) } }
+                        })
+                        s.gadgetbridgeSignature = sig
+                        res
                     }
-                    val res = if (f != null) up.upload(f) else up.upload("Gadgetbridge", len) { ctx.contentResolver.openInputStream(u)!! }
-                    log("Gadgetbridge → Server: $res"); ok = true
-                } catch (e: IOException) {
-                    log("Gadgetbridge Upload: ${e.message}"); networkError = true
                 } catch (e: Exception) {
                     log("Gadgetbridge: ${e.javaClass.simpleName}: ${e.message}")
                 }
             }
+            s.dashboard = dash
             if (ok) s.lastSync = iso(java.time.Instant.now()) ?: ""
-            if (!ok && networkError) throw IOException("Upload fehlgeschlagen")
-            return ok
+            if (up != null && !ok && networkError) throw IOException("Upload fehlgeschlagen")
+            return ok || up == null
         }
     }
 

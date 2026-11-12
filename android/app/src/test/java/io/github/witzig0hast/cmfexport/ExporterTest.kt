@@ -50,6 +50,8 @@ class ExporterTest {
             "CREATE TABLE CMF_WORKOUT_GPS_SAMPLE (TIMESTAMP INTEGER, DEVICE_ID INTEGER, USER_ID INTEGER, LATITUDE INTEGER, LONGITUDE INTEGER)",
             "CREATE TABLE BASE_ACTIVITY_SUMMARY (_id INTEGER PRIMARY KEY, NAME TEXT, START_TIME INTEGER, END_TIME INTEGER, ACTIVITY_KIND INTEGER, DEVICE_ID INTEGER, USER_ID INTEGER, SUMMARY_DATA TEXT, RAW_SUMMARY_DATA BLOB)",
             "INSERT INTO DEVICE VALUES (1,'CMF Watch 3 Pro','Nothing','AA:BB')",
+            "CREATE TABLE BATTERY_LEVEL (TIMESTAMP INTEGER, DEVICE_ID INTEGER, LEVEL INTEGER, BATTERY_INDEX INTEGER)",
+            "INSERT INTO BATTERY_LEVEL VALUES (${t0 - 3600},1,81,0),(${t0},1,77,0),(${t0},1,5,1)",
         ).forEach(db::execSQL)
         for (i in 0 until 10) db.execSQL("INSERT INTO CMF_ACTIVITY_SAMPLE VALUES (${t0 - 7200 + i * 60},1,1,0,100,0,70,80,5)")
         db.execSQL("INSERT INTO CMF_HEART_RATE_SAMPLE VALUES (${t0 * 1000 + 600000},1,1,58)")
@@ -96,6 +98,12 @@ class ExporterTest {
             assertTrue(z.getEntry("report.html") != null)
         }
         assertTrue(res.summary, res.summary.contains("Tief 1h00"))
+        ZipFile(out).use { z -> assertEquals(listOf("81", "77"), z.csv("battery.csv").map { it["level"] }) }
+        assertEquals(77, res.dash.battery)
+        assertEquals(58, res.dash.hr)
+        assertEquals(60.0, res.dash.night!!.deep, 0.01)
+        // dashboard survives the JSON round trip
+        assertEquals(res.dash, Dashboard.fromJson(res.dash.toJson()))
     }
 
     @Test

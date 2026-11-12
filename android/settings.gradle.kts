@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "CmfExport"
 include(":app")
+include(":tracker")

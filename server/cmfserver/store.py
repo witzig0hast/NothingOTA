@@ -47,6 +47,7 @@ SAMPLE_FILES = {
     "hrv_rmssd.csv": ("hrv", ["rmssd_ms"]),
     "respiratory_rate.csv": ("respiratory_rate", ["breaths_per_min"]),
     "weight.csv": ("weight", ["kg"]),
+    "battery.csv": ("battery", ["level", "battery_pct"]),
 }
 
 
@@ -198,7 +199,8 @@ class Store:
 
             for metric, key in (("heart_rate", "heart_rate"), ("spo2", "spo2"), ("stress", "stress"),
                                 ("resting_hr", "resting_heart_rate"), ("hrv", "hrv"),
-                                ("respiratory_rate", "respiratory_rate"), ("weight", "weight")):
+                                ("respiratory_rate", "respiratory_rate"), ("weight", "weight"),
+                                ("battery", "watch_battery")):
                 row = q("SELECT time, value FROM sample WHERE metric = ? ORDER BY ts DESC LIMIT 1", (metric,)).fetchone()
                 if row:
                     s[key] = row["value"]

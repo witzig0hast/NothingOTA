@@ -47,6 +47,7 @@ SENSORS = [
     Sensor("stress", "Stress", None, None, "measurement", "mdi:head-alert"),
     Sensor("respiratory_rate", "Atemfrequenz", "/min", None, "measurement", "mdi:lungs"),
     Sensor("weight", "Gewicht", "kg", "weight", "measurement", "mdi:scale-bathroom"),
+    Sensor("watch_battery", "Akku Uhr", "%", "battery", "measurement", None),
     Sensor("last_workout", "Letztes Training", None, None, None, "mdi:run"),
     Sensor("last_upload", "Letzte Synchronisierung", None, "timestamp", None, "mdi:cloud-upload"),
 ]

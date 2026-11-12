@@ -68,6 +68,9 @@ class GadgetbridgeExporter(private val ctx: Context) {
         val days = Days()
         val nights = mutableListOf<SleepNight>()
         val gps = mutableListOf<Triple<Long, Double, Double>>()
+        var lastBattery: Int? = null
+        var lastBatteryTime: Instant? = null
+        var lastHr: Pair<Instant, Int>? = null
 
         ExportZip(out).use { z ->
             if ("CMF_ACTIVITY_SAMPLE" in tables) {
@@ -84,9 +87,24 @@ class GadgetbridgeExporter(private val ctx: Context) {
                     }
                 }
             }
-            simple(z, db, tables, "CMF_HEART_RATE_SAMPLE", "heart_rate.csv", "HEART_RATE", progress) { i, v -> days[i].hr(v.toInt()) }
+            simple(z, db, tables, "CMF_HEART_RATE_SAMPLE", "heart_rate.csv", "HEART_RATE", progress) { i, v ->
+                days[i].hr(v.toInt()); if (v in 30..230) lastHr = i to v.toInt()
+            }
             simple(z, db, tables, "CMF_SPO2_SAMPLE", "spo2.csv", "SPO2", progress) { i, v -> days[i].spo2(v.toDouble()) }
             simple(z, db, tables, "CMF_STRESS_SAMPLE", "stress.csv", "STRESS", progress) { i, v -> days[i].stress(v.toInt()) }
+
+            // Watch battery (seconds timestamps; BATTERY_INDEX 0 = main battery)
+            if ("BATTERY_LEVEL" in tables) {
+                z.table("battery.csv", listOf("time", "level", "device_id")) {
+                    query(db, "BATTERY_LEVEL", "TIMESTAMP") { c ->
+                        if ((c.long("BATTERY_INDEX") ?: 0L) != 0L) return@query
+                        val ts = c.long("TIMESTAMP") ?: return@query
+                        val lvl = c.long("LEVEL") ?: return@query
+                        row(iso(Instant.ofEpochSecond(ts)), lvl, c.long("DEVICE_ID"))
+                        lastBattery = lvl.toInt(); lastBatteryTime = Instant.ofEpochSecond(ts)
+                    }
+                }
+            }
 
             // Sleep
             progress("Schlaf …")
@@ -163,7 +181,9 @@ class GadgetbridgeExporter(private val ctx: Context) {
             val html = Report.html("Gadgetbridge", nights, days)
             z.text("report.html", html)
             val counts = z.counts.filterKeys { !it.startsWith("CMF_") && it !in setOf("DEVICE", "BASE_ACTIVITY_SUMMARY", "BATTERY_LEVEL") }
-            return ExportResult(out, summaryText("Quelle: Gadgetbridge\nGeräte:\n$devices", counts, nights), html)
+            val (steps, stepsDay) = Dashboard.today(days)
+            val dash = Dashboard(nights.maxByOrNull { it.end }, steps, stepsDay, lastHr?.second, lastHr?.first, lastBattery, lastBatteryTime)
+            return ExportResult(out, summaryText("Quelle: Gadgetbridge\nGeräte:\n$devices", counts, nights), html, dash)
         }
     }
 

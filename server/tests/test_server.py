@@ -106,6 +106,7 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     st = res["state"]
     assert st["sleep_deep"] == 60 and st["sleep_rem"] == 20 and st["stress"] == 23 and st["spo2"] == 97
     assert st["last_workout"] == "OUTDOOR_RUNNING"
+    assert st["watch_battery"] == 77
     hist = req(base + "/api/history?metric=heart_rate&days=36500")[1]
     assert [h["value"] for h in hist] == [58]
 
@@ -128,6 +129,17 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     svc.stop.set()
     t.join(5)
     assert any(u["name"] == "gb.zip" for u in svc.store.uploads())
+
+
+def test_battery_only_zip(server, tmp_path):
+    """The app sends the battery level it read over Bluetooth as a tiny ZIP."""
+    _, _, base = server
+    z = tmp_path / "b.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("battery.csv", "time,level\n2030-01-01T10:00:00+01:00,64\n")
+    code, res = req(base + "/api/upload", z.read_bytes())
+    assert code == 200, res
+    assert res["state"]["watch_battery"] == 64
 
 
 def test_multipart_form(server, tmp_path):

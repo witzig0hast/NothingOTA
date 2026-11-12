@@ -22,7 +22,7 @@ aus Weg A und B in saubere CSV/JSON/GPX-Dateien plus einen HTML-Bericht umwandel
 
 ## Android-App (APK)
 
-Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.1.apk`](dist/CMF-Export-1.1.apk)**
+Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.2.apk`](dist/CMF-Export-1.2.apk)**
 (Android 8+, ca. 3 MB). Daten verlassen das Handy nur, wenn du die ZIP teilst oder unter
 „C · Home Assistant“ deinen eigenen [cmfserver](server/README.md) einträgst.
 

@@ -136,7 +136,62 @@ fun ExportZip.writeDaily(days: Days) = table("daily_summary.csv", days.columns) 
     days.map.forEach { (date, d) -> row(days.row(date, d)) }
 }
 
-data class ExportResult(val zip: File, val summary: String, val reportHtml: String)
+data class ExportResult(val zip: File, val summary: String, val reportHtml: String, val dash: Dashboard = Dashboard())
+
+/** What the start screen shows; merged across exports/syncs and persisted as JSON. */
+data class Dashboard(
+    val night: SleepNight? = null,
+    val stepsToday: Long? = null,
+    val stepsDay: String? = null,
+    val hr: Int? = null,
+    val hrTime: Instant? = null,
+    val battery: Int? = null,
+    val batteryTime: Instant? = null,
+) {
+    fun merge(o: Dashboard) = Dashboard(
+        newer(o.night, night) { it.end }, o.stepsToday ?: stepsToday, o.stepsDay ?: stepsDay,
+        if (o.hrTime != null && (hrTime == null || o.hrTime >= hrTime)) o.hr else hr,
+        if (o.hrTime != null && (hrTime == null || o.hrTime >= hrTime)) o.hrTime else hrTime,
+        if (o.batteryTime != null && (batteryTime == null || o.batteryTime >= batteryTime)) o.battery else battery,
+        if (o.batteryTime != null && (batteryTime == null || o.batteryTime >= batteryTime)) o.batteryTime else batteryTime,
+    )
+
+    private fun <T> newer(a: T?, b: T?, key: (T) -> Instant): T? =
+        if (a == null) b else if (b == null) a else if (key(a) >= key(b)) a else b
+
+    fun toJson(): String = org.json.JSONObject().apply {
+        night?.let { n ->
+            put("night", org.json.JSONObject().put("start", n.start.toEpochMilli()).put("end", n.end.toEpochMilli())
+                .put("deep", n.deep).put("light", n.light).put("rem", n.rem).put("awake", n.awake)
+                .put("source", n.source ?: "").put("stages", n.hasStages))
+        }
+        stepsToday?.let { put("steps", it) }; stepsDay?.let { put("stepsDay", it) }
+        hr?.let { put("hr", it) }; hrTime?.let { put("hrTime", it.toEpochMilli()) }
+        battery?.let { put("battery", it) }; batteryTime?.let { put("batteryTime", it.toEpochMilli()) }
+    }.toString()
+
+    companion object {
+        fun fromJson(s: String?): Dashboard = runCatching {
+            val o = org.json.JSONObject(s!!)
+            val n = o.optJSONObject("night")?.let {
+                SleepNight(Instant.ofEpochMilli(it.getLong("start")), Instant.ofEpochMilli(it.getLong("end")),
+                    it.getDouble("deep"), it.getDouble("light"), it.getDouble("rem"), it.getDouble("awake"),
+                    it.optString("source"), it.optBoolean("stages", true))
+            }
+            Dashboard(n, o.optLongOrNull("steps"), o.optString("stepsDay").ifEmpty { null },
+                o.optLongOrNull("hr")?.toInt(), o.optLongOrNull("hrTime")?.let(Instant::ofEpochMilli),
+                o.optLongOrNull("battery")?.toInt(), o.optLongOrNull("batteryTime")?.let(Instant::ofEpochMilli))
+        }.getOrDefault(Dashboard())
+
+        private fun org.json.JSONObject.optLongOrNull(k: String) = if (has(k)) getLong(k) else null
+
+        /** Today's steps from the per-day aggregation. */
+        fun today(days: Days): Pair<Long?, String> {
+            val d = LocalDate.now(zone)
+            return days.map[d]?.steps to d.toString()
+        }
+    }
+}
 
 fun summaryText(header: String, counts: Map<String, Int>, nights: List<SleepNight>): String = buildString {
     appendLine(header)

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#FF5A52</color>
+    <color name="bg">#0B0B0B</color>
+    <color name="surface">#171717</color>
+    <color name="surface_variant">#232323</color>
+    <color name="on_surface">#F2F2F2</color>
+    <color name="muted">#9A9A9A</color>
+    <color name="primary_container">#5C1210</color>
+    <color name="on_primary_container">#FFDAD7</color>
+    <color name="stage_deep">#6F7FF0</color>
+    <color name="stage_light">#9CC0FF</color>
+    <color name="stage_rem">#D08BF5</color>
+    <color name="stage_awake">#F7BE6A</color>
+</resources>

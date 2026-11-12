@@ -93,6 +93,7 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
 
         val days = Days()
         val nights = mutableListOf<SleepNight>()
+        var lastHr: Pair<Instant, Int>? = null
 
         ExportZip(out).use { z ->
             section(z, granted, SleepSessionRecord::class, progress) {
@@ -121,7 +122,10 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
             section(z, granted, HeartRateRecord::class, progress) {
                 z.table("heart_rate.csv", listOf("time", "bpm") + metaCols) {
                     readAll(HeartRateRecord::class, range) { r ->
-                        r.samples.forEach { s -> row(listOf(iso(s.time), s.beatsPerMinute) + meta(r)); days[s.time].hr(s.beatsPerMinute.toInt()) }
+                        r.samples.forEach { s ->
+                            row(listOf(iso(s.time), s.beatsPerMinute) + meta(r)); days[s.time].hr(s.beatsPerMinute.toInt())
+                            if (lastHr == null || s.time >= lastHr!!.first) lastHr = s.time to s.beatsPerMinute.toInt()
+                        }
                     }
                 }
             }
@@ -215,7 +219,9 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
                 notes.forEach { appendLine(it) }
             }
             val counts = z.counts.filterKeys { it != "daily_summary" }
-            return ExportResult(out, summaryText(header, counts, nights), html)
+            val (steps, stepsDay) = Dashboard.today(days)
+            val dash = Dashboard(nights.maxByOrNull { it.end }, steps, stepsDay, lastHr?.second, lastHr?.first)
+            return ExportResult(out, summaryText(header, counts, nights), html, dash)
         }
     }
 

@@ -48,7 +48,7 @@ Er liegt aber im Server und ist über `/api/history` abrufbar.
    ```
 4. Im Browser `http://<server>:8080/?token=<API_TOKEN>` öffnen. Dort siehst du die Statusseite und kannst
    Dateien hochladen.
-5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.1.apk`) unter **C · Home Assistant** die
+5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.2.apk`) unter **C · Home Assistant** die
    Server-Adresse und das Token eintragen, dann „Verbindung testen“ und
    „Automatisch alle 6 Stunden synchronisieren“ antippen. Dabei auch „Im Hintergrund lesen“ in
    Health Connect erlauben.

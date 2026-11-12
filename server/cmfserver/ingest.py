@@ -33,9 +33,15 @@ def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
             shutil.copyfileobj(src, dst)
 
 
+EXPORT_MARKERS = ("daily_summary.csv", "sleep_sessions.csv", "battery.csv", "heart_rate.csv", "workouts.csv")
+
+
 def _find_export_root(d: Path) -> Path | None:
-    hit = next(d.rglob("daily_summary.csv"), None) or next(d.rglob("sleep_sessions.csv"), None)
-    return hit.parent if hit else None
+    for name in EXPORT_MARKERS:
+        hit = next(d.rglob(name), None)
+        if hit:
+            return hit.parent
+    return None
 
 
 def _find_gadgetbridge_db(d: Path) -> Path | None:

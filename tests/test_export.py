@@ -27,6 +27,8 @@ def make_gb(path):
       "ACTIVITY_KIND" INTEGER NOT NULL, "BASE_LONGITUDE" INTEGER, "BASE_LATITUDE" INTEGER, "BASE_ALTITUDE" INTEGER, "GPX_TRACK" TEXT,
       "RAW_DETAILS_PATH" TEXT, "DEVICE_ID" INTEGER NOT NULL, "USER_ID" INTEGER NOT NULL, "SUMMARY_DATA" TEXT, "RAW_SUMMARY_DATA" BLOB);
     """)
+    c.execute('CREATE TABLE "BATTERY_LEVEL" ("TIMESTAMP" INTEGER NOT NULL, "DEVICE_ID" INTEGER NOT NULL, "LEVEL" INTEGER NOT NULL, "BATTERY_INDEX" INTEGER NOT NULL)')
+    c.execute("INSERT INTO BATTERY_LEVEL VALUES (?,1,81,0),(?,1,77,0),(?,1,5,1)", (T0 - 3600, T0, T0))
     c.execute("INSERT INTO DEVICE VALUES (1,'CMF Watch 3 Pro','Nothing','AA:BB:CC:DD:EE:FF',0,'')")
     c.execute("INSERT INTO DEVICE VALUES (2,'Other Band','X','11:22',0,'')")
     for i in range(10):
@@ -106,6 +108,7 @@ def test_gadgetbridge(tmp_path):
     daily = read_csv(out / "daily_summary.csv")
     assert sum(int(d["steps"]) for d in daily) == 1000
     assert (out / "raw" / "CMF_SLEEP_STAGE_SAMPLE.csv").exists()
+    assert [b["level"] for b in read_csv(out / "battery.csv")] == ["81", "77"]
     assert json.loads((out / "all_data.json").read_text())["sleep_sessions"]
     assert "Schlaf" in (out / "report.html").read_text()
 
