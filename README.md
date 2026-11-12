@@ -1,5 +1,9 @@
 # cmfexport – alle Daten aus der Nothing CMF Watch Pro 3 holen
 
+> **Neu:** [`server/`](server/README.md) ist ein Docker-Backend, das die Daten automatisch an
+> **Home Assistant** weitergibt (MQTT Discovery, 25 Sensoren: Schlafphasen, Puls, SpO2, Stress, Schritte …).
+> Die App lädt dafür alle 6 Stunden im Hintergrund hoch.
+
 Die offizielle CMF-Watch-App hat **keinen Export-Knopf**. Es gibt aber drei Wege an die
 Rohdaten (Schlafphasen, Puls, SpO2, Stress, Schritte, Distanz, Kalorien, Workouts inkl. GPS).
 Dieses Repo enthält ein Python-Tool (nur Standardbibliothek, Python ≥ 3.9), das die Dateien
@@ -18,8 +22,9 @@ aus Weg A und B in saubere CSV/JSON/GPX-Dateien plus einen HTML-Bericht umwandel
 
 ## Android-App (APK)
 
-Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.0.apk`](dist/CMF-Export-1.0.apk)**
-(Android 8+, ca. 3 MB, ohne Internet-Berechtigung: die Daten verlassen das Handy nur, wenn du die ZIP teilst).
+Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.1.apk`](dist/CMF-Export-1.1.apk)**
+(Android 8+, ca. 3 MB). Daten verlassen das Handy nur, wenn du die ZIP teilst oder unter
+„C · Home Assistant“ deinen eigenen [cmfserver](server/README.md) einträgst.
 
 1. APK aufs Handy laden und öffnen → „Installation aus unbekannten Quellen“ für Browser/Dateimanager erlauben.
 2. **Health Connect (Weg B, ohne Export-ZIP):** in der CMF-Watch-App Health-Connect-Sync aktivieren →

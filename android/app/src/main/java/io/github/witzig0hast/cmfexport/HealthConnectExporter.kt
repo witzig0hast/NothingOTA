@@ -41,6 +41,7 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
         )
         const val HISTORY = "android.permission.health.READ_HEALTH_DATA_HISTORY"
         val PERMISSIONS: Set<String> = RECORD_TYPES.map { HealthPermission.getReadPermission(it) }.toSet() + HISTORY
+        const val BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
     }
 
     private var onlyCmf = false

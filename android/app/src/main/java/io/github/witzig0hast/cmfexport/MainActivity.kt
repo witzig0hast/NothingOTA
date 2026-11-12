@@ -40,13 +40,23 @@ class MainActivity : ComponentActivity() {
     private lateinit var resultButtons: LinearLayout
     private val busyButtons = mutableListOf<Button>()
     private var last: ExportResult? = null
+    private lateinit var settings: Settings
+    private lateinit var urlInput: EditText
+    private lateinit var tokenInput: EditText
+    private lateinit var autoSync: CheckBox
 
     private val hcPermissions = registerForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
         val missing = HealthConnectExporter.PERMISSIONS - granted
         say("Health Connect: ${granted.size} Berechtigungen erteilt" + if (missing.isNotEmpty()) ", ${missing.size} fehlen (werden übersprungen)" else "")
     }
 
-    private val pickDb = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::runGadgetbridge) }
+    private val pickDb = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        // Keep access so the background sync can re-read Gadgetbridge's auto-export file later.
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            .onSuccess { settings.gadgetbridgeUri = uri.toString() }
+        runGadgetbridge(uri)
+    }
 
     private val saveZip = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         val zip = last?.zip ?: return@registerForActivityResult
@@ -58,6 +68,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        settings = Settings(this)
         setContentView(buildUi())
         if (intent?.action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" || intent?.action == "android.intent.action.VIEW_PERMISSION_USAGE") {
             showPrivacy()
@@ -83,13 +94,35 @@ class MainActivity : ComponentActivity() {
         daysInput = EditText(this).apply { setText("3650"); inputType = InputType.TYPE_CLASS_NUMBER; minEms = 4 }
         row.addView(daysInput)
         col.addView(row)
-        onlyCmf = CheckBox(this).apply { text = "Nur Daten der CMF-App"; isChecked = true }
+        onlyCmf = CheckBox(this).apply {
+            text = "Nur Daten der CMF-App"; isChecked = settings.onlyCmf
+            setOnCheckedChangeListener { _, c -> settings.onlyCmf = c }
+        }
         col.addView(onlyCmf)
         button("2. Aus Health Connect exportieren") { runHealthConnect() }
 
         heading("B · Gadgetbridge-Datenbank")
         note("Gadgetbridge → Datenverwaltung → Datenbank exportieren, dann hier die Datei (Gadgetbridge oder .zip) wählen. Liefert alle Rohdaten inkl. Stress und GPS.")
         button("Gadgetbridge-Datei auswählen …") { pickDb.launch(arrayOf("*/*")) }
+
+        heading("C · Home Assistant (Server)")
+        note("Adresse und Token deines cmfserver-Containers (siehe server/README im Repo), z.B. http://192.168.1.10:8080")
+        urlInput = EditText(this).apply { hint = "http://192.168.1.10:8080"; setText(settings.serverUrl); inputType = InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_CLASS_TEXT; isSingleLine = true }
+        col.addView(urlInput)
+        tokenInput = EditText(this).apply { hint = "API-Token"; setText(settings.token); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; isSingleLine = true }
+        col.addView(tokenInput)
+        button("Verbindung testen") { saveServer(); background { Uploader(settings).test() } }
+        button("Jetzt synchronisieren (letzte ${SyncWorker.SYNC_DAYS} Tage)") { saveServer(); background { SyncWorker.syncOnce(this) { m -> runOnUiThread { say(m) } }; "Fertig" } }
+        autoSync = CheckBox(this).apply {
+            text = "Automatisch alle 6 Stunden synchronisieren"; isChecked = settings.autoSync
+            setOnCheckedChangeListener { _, c -> setAutoSync(c) }
+        }
+        col.addView(autoSync)
+        note(buildString {
+            append("Gadgetbridge-Datei für Sync: ")
+            append(settings.gadgetbridgeUri?.let { "gespeichert ✓" } ?: "keine (oben bei B auswählen)")
+            if (settings.lastSync.isNotEmpty()) append("\nLetzte Synchronisierung: ${settings.lastSync}")
+        })
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { isIndeterminate = true; visibility = View.GONE }
         col.addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -100,10 +133,35 @@ class MainActivity : ComponentActivity() {
         button("Bericht anzeigen", resultButtons, busy = false) { showReport() }
         button("ZIP speichern …", resultButtons, busy = false) { last?.let { saveZip.launch(it.zip.name) } }
         button("ZIP teilen …", resultButtons, busy = false) { share() }
+        button("An Server senden", resultButtons) { saveServer(); val z = last?.zip ?: return@button; background { "Hochgeladen: " + Uploader(settings).upload(z) } }
 
         log = TextView(this).apply { typeface = Typeface.MONOSPACE; textSize = 12f; setTextIsSelectable(true); setPadding(0, dp(8), 0, 0) }
         col.addView(log)
         return ScrollView(this).apply { addView(col); fitsSystemWindows = true }
+    }
+
+    private fun saveServer() {
+        settings.serverUrl = urlInput.text.toString()
+        settings.token = tokenInput.text.toString()
+    }
+
+    private fun setAutoSync(on: Boolean) {
+        saveServer()
+        if (on && !settings.configured) { say("Bitte zuerst die Server-Adresse eintragen."); autoSync.isChecked = false; return }
+        settings.autoSync = on
+        SyncWorker.schedule(this, on)
+        say(if (on) "Automatische Synchronisierung alle 6 h aktiviert." else "Automatische Synchronisierung aus.")
+        if (on && hcClient() != null) hcPermissions.launch(HealthConnectExporter.PERMISSIONS + HealthConnectExporter.BACKGROUND)
+    }
+
+    /** Runs a blocking task off the UI thread and prints its result or error. */
+    private fun background(block: suspend () -> String) {
+        setBusy(true)
+        lifecycleScope.launch {
+            try { say(withContext(Dispatchers.IO) { block() }) }
+            catch (e: Exception) { say("Fehler: ${e.message ?: e.javaClass.simpleName}") }
+            finally { setBusy(false) }
+        }
     }
 
     private fun hcClient(): HealthConnectClient? {
@@ -167,7 +225,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showPrivacy() = AlertDialog.Builder(this)
         .setTitle("Datenschutz")
-        .setMessage("CMF Export liest deine Gesundheitsdaten nur lokal auf dem Gerät, um sie als Datei zu exportieren. Es werden keine Daten ins Internet gesendet; die App hat keine Internet-Berechtigung.")
+        .setMessage("CMF Export liest deine Gesundheitsdaten auf dem Gerät, um sie als Datei zu exportieren. Daten werden nur an den Server gesendet, den du selbst unter „Home Assistant (Server)“ einträgst – sonst nirgendwohin.")
         .setPositiveButton("OK", null).show()
 
     private fun setBusy(b: Boolean) {

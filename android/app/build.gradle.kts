@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.witzig0hast.cmfexport"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     // Fixed, non-secret key (password "android", like every Android debug key) so that
@@ -48,12 +48,14 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.health.connect:connect-testing:1.0.0-alpha04")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 // Robolectric would download the Android framework jar itself at test time; let Gradle
@@ -66,5 +68,6 @@ tasks.withType<Test>().configureEach {
     doFirst {
         systemProperty("robolectric.offline", "true")
         systemProperty("robolectric.dependency.dir", jars.singleFile.parentFile.absolutePath)
+        System.getenv("CMF_SERVER_URL")?.let { environment("CMF_SERVER_URL", it) }
     }
 }

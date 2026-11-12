@@ -1,0 +1,29 @@
+# Start:  docker compose -f server/docker-compose.yml up -d --build   (aus dem Repo-Verzeichnis)
+services:
+  cmfserver:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: cmfserver:latest
+    container_name: cmfserver
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Europe/Berlin
+      API_TOKEN: "bitte-ein-langes-zufaelliges-token"   # z.B.: openssl rand -hex 24
+      # --- Variante 1: MQTT (empfohlen, Sensoren erscheinen automatisch) ---
+      MQTT_HOST: 192.168.1.10          # IP von Home Assistant / Mosquitto
+      MQTT_PORT: 1883
+      MQTT_USER: mqtt-user
+      MQTT_PASSWORD: mqtt-passwort
+      # --- Variante 2: Home-Assistant-REST-API (ohne MQTT) ---
+      # HA_URL: http://192.168.1.10:8123
+      # HA_TOKEN: "langlebiges-zugriffstoken"
+      DEVICE_NAME: CMF Watch Pro 3
+    volumes:
+      - cmf-data:/data      # Datenbank (benanntes Volume, gehört automatisch dem Container-Benutzer)
+      - ./import:/import:ro # hier abgelegte Dateien werden automatisch importiert (z.B. per Syncthing)
+
+volumes:
+  cmf-data:
