@@ -22,12 +22,17 @@ aus Weg A und B in saubere CSV/JSON/GPX-Dateien plus einen HTML-Bericht umwandel
 
 ## Android-App (APK)
 
-Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.2.apk`](dist/CMF-Export-1.2.apk)**
+Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.3.apk`](dist/CMF-Export-1.3.apk)**
 (Android 8+, ca. 3 MB). Daten verlassen das Handy nur, wenn du die ZIP teilst oder unter
 „Home Assistant“ deinen eigenen [cmfserver](server/README.md) einträgst.
 
-Neu in 1.2: Startseite mit letzter Nacht, Schritten, Puls und Uhr-Akku, helles und dunkles Design,
-Senden an Home Assistant alle 15 Minuten (einstellbar bis 6 Stunden).
+Neu in 1.3:
+- **Schlaf pro Tag:** Ein Nickerchen am Nachmittag zählt nicht mehr als „letzte Nacht“. Eine
+  unterbrochene Nacht wird zu einer Nacht zusammengefasst.
+- **Trends:** Schlaf, Schritte und Ruhepuls der letzten 14 Tage
+- **Widget:** zeigt Schlaf, Schritte, Puls und Akku auf dem Startbildschirm
+- **Uhr-Akku:** nur noch aus Gadgetbridge. Über Bluetooth meldet die CMF-Uhr einen falschen festen Wert.
+- **Home Assistant:** Senden alle 15 Minuten (einstellbar bis 6 Stunden)
 
 1. APK aufs Handy laden und öffnen → „Installation aus unbekannten Quellen“ für Browser/Dateimanager erlauben.
 2. **Health Connect (Weg B, ohne Export-ZIP):** in der CMF-Watch-App Health-Connect-Sync aktivieren →
@@ -47,25 +52,33 @@ Versionen sich über alte installieren lassen.
 
 ## CMF Track – Aktivitäten aufzeichnen (zweite App)
 
-**[`dist/CMF-Track-1.0.apk`](dist/CMF-Track-1.0.apk)** ist ein eigenständiger Aktivitäts-Tracker: Die Strecke
-kommt per GPS vom Handy, der Puls von der Uhr.
+**[`dist/CMF-Track-2.0.apk`](dist/CMF-Track-2.0.apk)** ist ein eigenständiger Aktivitäts-Tracker im Stil von
+Strava/Komoot: Die Strecke kommt per GPS vom Handy, der Puls von der Uhr.
 
-- **Sportarten:** Laufen, Gehen, Wandern, Radfahren, Inlineskaten, Sonstiges
-- **Live-Werte:** Zeit, Distanz, aktuelles und Ø-Tempo (oder km/h), Puls, Höhenmeter, Schrittfrequenz,
-  GPS-Genauigkeit, km-Splits, Route; dazu eine Benachrichtigung mit den Werten
-- **Genauigkeit:** GPS-Kalman-Filter mit Geschwindigkeitsmodell, Distanz aus der Doppler-Geschwindigkeit des GPS,
-  Sprung- und Ungenauigkeitsfilter, Auto-Pause mit Bestätigung in beide Richtungen, Höhenmeter per Barometer
-  (sonst geglättete GPS-Höhe). In den Tests mit verrauschtem GPS: 5 km auf 0,07 % genau,
-  3-km-Runde auf 0,06 %, Bewegungszeit auf ±1 s, keine Phantomstrecke im Stand.
-- **Puls von der Uhr:** live über Bluetooth von jedem Gerät, das den Standard-Herzfrequenzdienst sendet (Brustgurt,
-  Uhr im Puls-Übertragungsmodus). Sonst lädt die App nach dem Training automatisch die Pulswerte,
-  die die CMF-App in Health Connect gespeichert hat, und rechnet Ø/Max-Puls, Kalorien (Keytel-Formel),
-  Pulszonen und Splits neu.
-- **Auswertung:** Route nach Tempo eingefärbt, Tempo-, Höhen- und Pulsdiagramm, Pulszonen, km-Splits mit Puls
-  und Höhe
-- **Export:** TCX (mit Puls, lässt sich in Strava, Garmin Connect und Runalyze hochladen) und GPX.
-  Optional geht jedes Training automatisch an den cmfserver; in Home Assistant erscheinen dann
-  „Letztes Training“, Distanz, Dauer und Ø-Puls.
+- **Karte (OpenStreetMap):** Ebenen Standard, Topo (Wandern), Rad (CyclOSM) und Satellit. Bei der Aufnahme
+  ist die Karte bildschirmfüllend und folgt deinem Standort; nach dem Training ist die Strecke nach Tempo
+  eingefärbt, mit km-Markierungen sowie Start und Ziel.
+- **Live-Werte:** Zeit, Distanz, Tempo, Ø-Tempo, Puls (mit Quelle), Höhenmeter, Schrittfrequenz oder kcal,
+  km-Splits; Countdown 3-2-1, **Sprachansage** pro Kilometer, **Runden-Taste**, Pause/Runde auch in der
+  Benachrichtigung
+- **Puls von der Uhr:** Die App liest den Puls, den die CMF-App in Health Connect speichert, schon während
+  des Trainings (jede Minute) und danach automatisch im Hintergrund, bis die CMF-App synchronisiert hat.
+  Werte, die die Uhr nur alle paar Minuten misst, werden interpoliert. Die App sagt dir klar, warum noch
+  kein Puls da ist („noch nicht synchronisiert“, „nicht freigegeben“ …).
+  **Tipp:** Starte das Training zusätzlich auf der Uhr, dann misst sie den Puls jede Sekunde.
+  Brustgurte (Bluetooth) funktionieren live.
+- **Uhr-Trainings übernehmen:** Trainings, die du nur auf der Uhr gestartet hast (mit GPS der Uhr), holt die
+  App aus Health Connect und zeigt sie mit Karte, Puls und Splits an.
+- **Routen:** GPX importieren (z. B. aus Komoot), auf der Karte anzeigen, Restdistanz und Warnung per
+  Vibration und Sprache, wenn du von der Route abkommst; jedes eigene Training lässt sich als Route übernehmen.
+- **Auswertung:** Bestleistungen (400 m bis Marathon) mit 🏆-Bestzeiten, km-Splits, Runden, Pulszonen,
+  Tempo-, Höhen-, Puls- und Schrittfrequenz-Diagramm, Schrittlänge, Kalorien (Keytel-Formel)
+- **Statistik:** Wochenziel mit Fortschritt, km pro Woche (12 Wochen), Monat, Jahr, gesamt, Höhenmeter,
+  Wochen-Serie, persönliche Bestzeiten
+- **Teilen und Export:** Bild zum Teilen (Route + Zahlen), TCX mit Puls (Strava, Garmin Connect, Runalyze),
+  GPX, in Health Connect speichern, automatisch an Home Assistant senden
+- **Genauigkeit:** GPS-Kalman-Filter, Distanz aus der Doppler-Geschwindigkeit, Sprung- und Rauschfilter,
+  Auto-Pause mit Bestätigung, Höhenmeter per Barometer; in Tests auf 0,1 % (Distanz) und 1 s (Zeit) genau
 
 Beide Apps sind mit demselben Schlüssel signiert, laufen aber unabhängig voneinander.
 

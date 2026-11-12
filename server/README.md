@@ -2,7 +2,7 @@
 
 Kleiner Docker-Container, der die Daten deiner CMF Watch Pro 3 annimmt, in einer SQLite-Datenbank
 zusammenführt und an **Home Assistant** weitergibt. Bei MQTT legt Home Assistant über MQTT Discovery
-automatisch ein Gerät „CMF Watch Pro 3“ mit 29 Sensoren an. Alternativ geht es über die REST-API.
+automatisch ein Gerät „CMF Watch Pro 3“ mit 31 Sensoren an. Alternativ geht es über die REST-API.
 
 ```
 CMF Watch ──BT──> CMF-App ──> Health Connect ─┐
@@ -15,13 +15,14 @@ CMF Watch ──BT──> Gadgetbridge ── Auto-Export ┘                   
 
 | Sensor | Entity (Beispiel) | Einheit |
 |---|---|---|
-| Schlaf letzte Nacht, Tief-, Leicht-, REM-Schlaf, Wachphasen, Zeit im Bett | `sensor.cmf_watch_pro_3_schlaf_letzte_nacht` … | min |
+| Schlaf letzte Nacht, Tief-, Leicht-, REM-Schlaf, Wachphasen, Zeit im Bett (Nickerchen zählen nicht) | `sensor.cmf_watch_pro_3_schlaf_letzte_nacht` … | min |
+| Nickerchen heute, Schlaf Ø 7 Tage | `sensor.cmf_watch_pro_3_nickerchen_heute` | min |
 | Schlafeffizienz | `sensor.cmf_watch_pro_3_schlafeffizienz` | % |
 | Eingeschlafen / Aufgewacht | `sensor.cmf_watch_pro_3_eingeschlafen` | Zeitstempel |
 | Schritte heute / gestern, Distanz heute, Kalorien heute | `sensor.cmf_watch_pro_3_schritte_heute` | steps, m, kcal |
 | Puls (letzter Wert), Puls Ø/min/max heute, Ruhepuls, HRV | `sensor.cmf_watch_pro_3_puls` | bpm, ms |
 | Blutsauerstoff, Stress, Atemfrequenz, Gewicht | `sensor.cmf_watch_pro_3_blutsauerstoff` | %, –, /min, kg |
-| Akku Uhr | `sensor.cmf_watch_pro_3_akku_uhr` | % |
+| Akku Uhr (nur mit Gadgetbridge; Werte älter als 2 Tage werden nicht angezeigt) | `sensor.cmf_watch_pro_3_akku_uhr` | % |
 | Letztes Training (+ Distanz, Dauer, Ø Puls), Letzte Synchronisierung | `sensor.cmf_watch_pro_3_letztes_training` | km, min, bpm |
 
 Jeder Sensor hat Attribute, z. B. `measured_at` beim Puls oder alle Schlafphasen beim Schlafsensor.
@@ -49,7 +50,7 @@ Er liegt aber im Server und ist über `/api/history` abrufbar.
    ```
 4. Im Browser `http://<server>:8080/?token=<API_TOKEN>` öffnen. Dort siehst du die Statusseite und kannst
    Dateien hochladen.
-5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.2.apk`) auf der Karte **Home Assistant** die
+5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.3.apk`) auf der Karte **Home Assistant** die
    Server-Adresse und das Token eintragen, dann „Verbindung testen“ und
    „Automatisch senden“ einschalten (Häufigkeit: Standard 15 Minuten). Dabei auch „Im Hintergrund lesen“ in
    Health Connect erlauben.
