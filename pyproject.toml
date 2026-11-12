@@ -1,0 +1,11 @@
+[project]
+name = "cmfexport"
+version = "0.1.0"
+description = "Export all health data (sleep, heart rate, SpO2, stress, activity, workouts) from a Nothing CMF Watch"
+requires-python = ">=3.9"
+
+[project.scripts]
+cmfexport = "cmfexport.__main__:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
