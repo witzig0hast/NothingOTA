@@ -16,6 +16,27 @@ aus Weg A und B in saubere CSV/JSON/GPX-Dateien plus einen HTML-Bericht umwandel
 
 ---
 
+## Android-App (APK)
+
+Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.0.apk`](dist/CMF-Export-1.0.apk)**
+(Android 8+, ca. 3 MB, ohne Internet-Berechtigung: die Daten verlassen das Handy nur, wenn du die ZIP teilst).
+
+1. APK aufs Handy laden und öffnen → „Installation aus unbekannten Quellen“ für Browser/Dateimanager erlauben.
+2. **Health Connect (Weg B, ohne Export-ZIP):** in der CMF-Watch-App Health-Connect-Sync aktivieren →
+   in CMF Export „1. Health Connect Zugriff erlauben“ → alles freigeben (inkl. „Vergangene Daten lesen“,
+   sonst gibt Health Connect nur 30 Tage heraus) → „2. Aus Health Connect exportieren“.
+3. **Gadgetbridge (Weg A):** in Gadgetbridge die Datenbank exportieren → in CMF Export
+   „Gadgetbridge-Datei auswählen …“.
+4. Danach: „Bericht anzeigen“ (Schlafbalken + Tageswerte), „ZIP speichern …“ oder „ZIP teilen …“.
+   Die ZIP enthält dieselben CSV/GPX/HTML-Dateien wie das Python-Tool, bei Health Connect zusätzlich
+   Ruhepuls, HRV, Atemfrequenz, Etagen, Geschwindigkeit, VO2max und Gewicht.
+
+Selbst bauen (JDK 17+, Android SDK 36): `cd android && ./gradlew testReleaseUnitTest assembleRelease`
+→ `android/app/build/outputs/apk/release/app-release.apk`. Bei jedem Push baut außerdem GitHub Actions
+(`.github/workflows/android.yml`) die APK und hängt sie als Artefakt an. Die APK ist mit einem festen,
+nicht geheimen Schlüssel signiert (`android/app/cmfexport.keystore`, Passwort `android`), damit neue
+Versionen sich über alte installieren lassen.
+
 ## Weg A – Gadgetbridge (Open Source, direkt per Bluetooth)
 
 [Gadgetbridge](https://gadgetbridge.org/gadgets/wearables/nothing/) unterstützt die CMF Watch Pro,
