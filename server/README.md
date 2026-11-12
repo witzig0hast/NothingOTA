@@ -30,33 +30,50 @@ Home Assistant speichert den Verlauf selbst, so bekommst du Langzeit-Statistiken
 Den Verlauf vor der ersten Synchronisierung kann Home Assistant nicht nachträglich übernehmen.
 Er liegt aber im Server und ist über `/api/history` abrufbar.
 
-## Installation
+## Installation (Home Assistant im Docker-Container)
 
-1. **MQTT in Home Assistant** einrichten, falls noch nicht vorhanden: Add-on „Mosquitto broker“
-   installieren, die Integration „MQTT“ hinzufügen und einen Benutzer für den Server anlegen
-   (Einstellungen → Personen → Benutzer, oder `logins` im Mosquitto-Add-on).
-2. Token erzeugen: `openssl rand -hex 24`
-3. `server/docker-compose.yml` anpassen (`API_TOKEN`, `MQTT_HOST`, `MQTT_USER`, `MQTT_PASSWORD`, `TZ`)
-   und im Repo-Verzeichnis starten:
-   ```bash
-   docker compose -f server/docker-compose.yml up -d --build
-   ```
-   Oder ohne Compose:
-   ```bash
-   docker build -f server/Dockerfile -t cmfserver .
-   docker run -d --name cmfserver --restart unless-stopped -p 8080:8080 \
-     -e TZ=Europe/Berlin -e API_TOKEN=... -e MQTT_HOST=192.168.1.10 -e MQTT_USER=... -e MQTT_PASSWORD=... \
-     -v cmf-data:/data -v cmf-import:/import cmfserver
-   ```
-4. Im Browser `http://<server>:8080/?token=<API_TOKEN>` öffnen. Dort siehst du die Statusseite und kannst
-   Dateien hochladen.
-5. **Handy:** In der App „CMF Export“ (`dist/CMF-Export-1.3.apk`) auf der Karte **Home Assistant** die
-   Server-Adresse und das Token eintragen, dann „Verbindung testen“ und
-   „Automatisch senden“ einschalten (Häufigkeit: Standard 15 Minuten). Dabei auch „Im Hintergrund lesen“ in
-   Health Connect erlauben.
+Du brauchst nur Docker auf dem Rechner, auf dem auch Home Assistant läuft (oder einem anderen im Heimnetz).
+Das fertige Image `ghcr.io/witzig0hast/cmfserver:latest` gibt es für PC/NAS (amd64) und Raspberry Pi (arm64/armv7).
 
-Danach erscheint in Home Assistant unter *Einstellungen → Geräte & Dienste → MQTT* das Gerät
-**CMF Watch Pro 3**.
+1. **Ordner holen:** Ordner `server/stack/` aus diesem Repo auf den Docker-Rechner kopieren, z. B.
+   ```bash
+   git clone https://github.com/witzig0hast/NothingOTA.git
+   cd NothingOTA/server/stack
+   ```
+2. **Token setzen:** In `docker-compose.yml` `API_TOKEN` auf ein eigenes Passwort setzen
+   (z. B. Ausgabe von `openssl rand -hex 24`).
+3. **Starten:**
+   ```bash
+   docker compose up -d
+   ```
+   Das startet **Mosquitto** (MQTT-Broker, Port 1883) und **cmfserver** (Port 8080).
+   Hast du schon einen MQTT-Broker, lösche den `mosquitto`-Block und trage bei `MQTT_HOST` dessen IP ein
+   (plus `MQTT_USER`/`MQTT_PASSWORD`).
+4. **Home Assistant mit MQTT verbinden:** *Einstellungen → Geräte & Dienste → Integration hinzufügen →
+   MQTT* → Broker = IP des Docker-Rechners (z. B. `192.168.1.10`), Port `1883`, Benutzer leer lassen.
+   Läuft Home Assistant mit `network_mode: host` auf demselben Rechner, geht auch `127.0.0.1`.
+5. **Prüfen:** `http://<IP>:8080/?token=<API_TOKEN>` im Browser öffnen. Dort steht „Weiterleitung an: Mqtt“.
+6. **Handy einrichten:**
+   - **CMF Export:** Auf der Karte „Home Assistant“ Adresse `http://<IP>:8080` und Token eintragen,
+     „Testen“ antippen, „Automatisch senden“ einschalten.
+   - **CMF Track:** Unter *Profil → Home Assistant* dieselben Daten eintragen.
+
+Nach dem ersten Senden erscheint unter *Einstellungen → Geräte & Dienste → MQTT* das Gerät
+**CMF Watch Pro 3** mit allen Sensoren.
+
+**Update:** `docker compose pull && docker compose up -d`
+
+**MQTT mit Passwort (optional):** In `mosquitto/mosquitto.conf` `allow_anonymous false` und
+`password_file /mosquitto/config/passwd` setzen, dann
+`docker compose exec mosquitto mosquitto_passwd -c /mosquitto/config/passwd cmf`.
+Damit das funktioniert, die Konfiguration ohne `:ro` einbinden. In cmfserver `MQTT_USER`/`MQTT_PASSWORD` und
+in Home Assistant dieselben Zugangsdaten eintragen.
+
+### Selbst bauen statt fertigem Image
+
+```bash
+docker compose -f server/docker-compose.yml up -d --build   # im Repo-Verzeichnis, nutzt server/Dockerfile
+```
 
 ## Wege, wie Daten zum Server kommen
 

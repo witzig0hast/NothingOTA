@@ -1,0 +1,37 @@
+# Fertiger Stack: MQTT-Broker (Mosquitto) + cmfserver.
+# 1. Diesen Ordner auf den Docker-Rechner kopieren
+# 2. API_TOKEN unten ändern (z.B.: openssl rand -hex 24)
+# 3. docker compose up -d
+# 4. In Home Assistant: Einstellungen → Geräte & Dienste → Integration hinzufügen → MQTT
+#    Broker = IP dieses Rechners, Port 1883, ohne Benutzer/Passwort
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  cmfserver:
+    image: ghcr.io/witzig0hast/cmfserver:latest
+    container_name: cmfserver
+    restart: unless-stopped
+    depends_on: [mosquitto]
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Europe/Berlin
+      API_TOKEN: "HIER-EIN-EIGENES-LANGES-TOKEN"
+      MQTT_HOST: mosquitto        # Name des Containers oben – nicht ändern
+      MQTT_PORT: 1883
+      DEVICE_NAME: CMF Watch Pro 3
+    volumes:
+      - cmf-data:/data
+      - ./import:/import:ro       # optional: Gadgetbridge-Dateien hier ablegen
+
+volumes:
+  mosquitto-data:
+  cmf-data:

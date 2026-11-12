@@ -21,15 +21,25 @@ jobs:
         run: |
           pip install pytest -r server/requirements.txt
           python -m pytest -q
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push image
+      - name: Image name and tags
+        id: meta
         run: |
           IMAGE=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/cmfserver
-          TAG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-          docker build -f server/Dockerfile -t $IMAGE:$TAG -t $IMAGE:latest .
-          docker push $IMAGE:$TAG
-          if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then docker push $IMAGE:latest; fi
+          TAGS="$IMAGE:$(echo "${GITHUB_REF_NAME}" | tr '/' '-')"
+          if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then TAGS="$TAGS,$IMAGE:latest"; fi
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+      # amd64 for PCs/NAS, arm64 for Raspberry Pi 4/5 and ARM NAS, arm/v7 for older Pis
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
