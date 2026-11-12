@@ -173,6 +173,32 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Trends -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/trendCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Letzte 14 Tage" />
+
+                    <TextView android:id="@+id/trendSleepText" style="@style/Label" android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" />
+                    <io.github.witzig0hast.cmfexport.TrendBarsView android:id="@+id/trendSleep" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="6dp" />
+
+                    <TextView android:id="@+id/trendStepsText" style="@style/Label" android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" />
+                    <io.github.witzig0hast.cmfexport.TrendBarsView android:id="@+id/trendSteps" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="6dp" />
+
+                    <TextView android:id="@+id/trendHrText" style="@style/Label" android:textAllCaps="false" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" />
+                    <io.github.witzig0hast.cmfexport.TrendBarsView android:id="@+id/trendHr" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="6dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Home Assistant -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"

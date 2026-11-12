@@ -185,7 +185,7 @@ class GadgetbridgeExporter(private val ctx: Context) {
             val counts = z.counts.filterKeys { !it.startsWith("CMF_") && it !in setOf("DEVICE", "BASE_ACTIVITY_SUMMARY", "BATTERY_LEVEL") }
             val (steps, stepsDay) = Dashboard.today(days)
             val dash = Dashboard(sleep.nights.lastOrNull(), steps, stepsDay, lastHr?.second, lastHr?.first, lastBattery, lastBatteryTime, nap = Dashboard.napToday(sleep))
-            return ExportResult(out, summaryText("Quelle: Gadgetbridge\nGeräte:\n$devices", counts, sleep), html, dash)
+            return ExportResult(out, summaryText("Quelle: Gadgetbridge\nGeräte:\n$devices", counts, sleep), html, dash, TrendDay.of(days))
         }
     }
 

@@ -223,7 +223,7 @@ class HealthConnectExporter(private val client: HealthConnectClient) {
             val counts = z.counts.filterKeys { it != "daily_summary" }
             val (steps, stepsDay) = Dashboard.today(days)
             val dash = Dashboard(sleep.nights.lastOrNull(), steps, stepsDay, lastHr?.second, lastHr?.first, nap = Dashboard.napToday(sleep))
-            return ExportResult(out, summaryText(header, counts, sleep), html, dash)
+            return ExportResult(out, summaryText(header, counts, sleep), html, dash, TrendDay.of(days))
         }
     }
 

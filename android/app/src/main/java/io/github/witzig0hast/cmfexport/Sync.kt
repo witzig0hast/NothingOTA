@@ -54,6 +54,12 @@ class Settings(ctx: Context) {
             return Dashboard.fromJson(p.getString("dashboard", null))
         }
         set(v) = p.edit().putString("dashboard", v.toJson()).apply()
+    var trend: List<TrendDay>
+        get() = runCatching {
+            val a = org.json.JSONArray(p.getString("trend", "[]"))
+            (0 until a.length()).map { TrendDay.parse(a.getJSONObject(it)) }
+        }.getOrDefault(emptyList())
+        set(v) = p.edit().putString("trend", org.json.JSONArray(v.map { it.json() }).toString()).apply()
     var lastSync: String
         get() = p.getString("last_sync", "") ?: ""
         set(v) = p.edit().putString("last_sync", v).apply()
@@ -156,6 +162,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                     val f = File(dir, "cmf_healthconnect_sync.zip")
                     val res = HealthConnectExporter(HealthConnectClient.getOrCreate(ctx)).export(SYNC_DAYS, s.onlyCmf, f) {}
                     dash = dash.merge(res.dash)
+                    s.trend = TrendDay.merge(s.trend, res.trend)
                     upload("Health Connect") { up!!.upload(f) }
                 } catch (e: Exception) {
                     log("Health Connect: ${e.javaClass.simpleName}: ${e.message}")
@@ -170,7 +177,9 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                 try {
                     // Dashboard from the file, then send the file as-is (the server parses it itself).
                     val f = File(dir, "gb.zip")
-                    dash = dash.merge(GadgetbridgeExporter(ctx).export(u, f) {}.dash)
+                    val gb = GadgetbridgeExporter(ctx).export(u, f) {}
+                    dash = dash.merge(gb.dash)
+                    s.trend = TrendDay.merge(s.trend, gb.trend)
                     f.delete()
                     upload("Gadgetbridge") {
                         val len = ctx.contentResolver.openAssetFileDescriptor(u, "r")?.use { it.length } ?: -1L
@@ -186,6 +195,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                 }
             }
             s.dashboard = dash
+            CmfWidget.updateAll(ctx)
             if (ok) s.lastSync = iso(java.time.Instant.now()) ?: ""
             if (up != null && !ok && networkError) throw IOException("Upload fehlgeschlagen")
             return ok || up == null

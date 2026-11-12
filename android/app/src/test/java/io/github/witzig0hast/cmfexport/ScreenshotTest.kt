@@ -30,7 +30,12 @@ class ScreenshotTest {
             dashboard = Dashboard(
                 SleepNight(now.minus(Duration.ofHours(9)), now.minus(Duration.ofMinutes(95)), 82.0, 251.0, 96.0, 23.0, "com.nothing.cmf.watch"),
                 8432, LocalDate.now(zone).toString(), 67, now.minus(Duration.ofMinutes(4)), 76, now.minus(Duration.ofMinutes(6)),
+                nap = SleepNight(now.minus(Duration.ofMinutes(50)), now.minus(Duration.ofMinutes(15)), 0.0, 32.0, 0.0, 0.0, null, true, 1, nap = true),
             )
+            val r = java.util.Random(4)
+            trend = (13 downTo 0).map { k ->
+                TrendDay(LocalDate.now(zone).minusDays(k.toLong()), 6000L + r.nextInt(7000), 380.0 + r.nextInt(110), null, 72.0 + r.nextInt(8), 55L + r.nextInt(5))
+            }
         }
         val act = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val root = act.findViewById<View>(R.id.root)

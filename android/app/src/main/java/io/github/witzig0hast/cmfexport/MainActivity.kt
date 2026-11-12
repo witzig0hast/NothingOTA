@@ -165,6 +165,7 @@ class MainActivity : AppCompatActivity() {
             if (!it.hasStages) "ohne Schlafphasen" else "● Tief ${hm(it.deep)}   ● Leicht ${hm(it.light)}   ● REM ${hm(it.rem)}   ● Wach ${hm(it.awake)}"
         } ?: ""
         colorLegend()
+        renderTrends()
         v<TextView>(R.id.napText).apply {
             val nap = d.nap?.takeIf { day(it.start) == LocalDate.now(zone) }
             visibility = if (nap != null) View.VISIBLE else View.GONE
@@ -189,6 +190,24 @@ class MainActivity : AppCompatActivity() {
         }
         v<View>(R.id.statusDot).backgroundTintList = ColorStateList.valueOf(
             if (fresh) 0xFF2EBD59.toInt() else if (settings.configured) getColor(R.color.stage_awake) else getColor(R.color.muted))
+    }
+
+    private fun renderTrends() {
+        val days = (13 downTo 0).map { LocalDate.now(zone).minusDays(it.toLong()) }
+        val byDate = settings.trend.associateBy { it.date }
+        val row = days.map { byDate[it] }
+        v<View>(R.id.trendCard).visibility = if (row.count { it != null } >= 2) View.VISIBLE else View.GONE
+        val nf = NumberFormat.getIntegerInstance()
+        val sleep = row.map { it?.sleepMin }
+        val steps = row.map { it?.steps?.toDouble() }
+        val hr = row.map { it?.restingHr?.toDouble() ?: it?.hrAvg }
+        fun avg(xs: List<Double?>) = xs.filterNotNull().takeIf { it.isNotEmpty() }?.average()
+        v<TextView>(R.id.trendSleepText).text = "SCHLAF · Ø ${avg(sleep)?.let { hm(it).replace("h", " h ") + " min" } ?: "–"} pro Nacht"
+        v<TextView>(R.id.trendStepsText).text = "SCHRITTE · Ø ${avg(steps)?.let { nf.format(it.toLong()) } ?: "–"} pro Tag"
+        v<TextView>(R.id.trendHrText).text = (if (row.any { it?.restingHr != null }) "RUHEPULS" else "Ø PULS") + " · Ø ${avg(hr)?.toInt() ?: "–"} bpm"
+        v<TrendBarsView>(R.id.trendSleep).set(sleep, getColor(R.color.stage_deep))
+        v<TrendBarsView>(R.id.trendSteps).set(steps, 0xFF2EBD59.toInt())
+        v<TrendBarsView>(R.id.trendHr).set(hr, getColor(R.color.stage_awake), fromZero = false)
     }
 
     private fun colorLegend() {
@@ -256,6 +275,8 @@ class MainActivity : AppCompatActivity() {
                 val res = withContext(Dispatchers.IO) { block(out) { msg -> runOnUiThread { say(msg) } } }
                 last = res
                 settings.dashboard = settings.dashboard.merge(res.dash)
+                settings.trend = TrendDay.merge(settings.trend, res.trend)
+                CmfWidget.updateAll(this@MainActivity)
                 say(res.summary)
                 val counts = res.summary.lines().mapNotNull { Regex("^  (\\S+)\\s+(\\d+)$").find(it)?.destructured }
                     .filter { it.component2() != "0" }.joinToString("\n") { (k, n) -> "$k: $n" }

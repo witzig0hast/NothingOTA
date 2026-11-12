@@ -205,7 +205,37 @@ fun ExportZip.writeDaily(days: Days) = table("daily_summary.csv", days.columns) 
     days.map.forEach { (date, d) -> row(days.row(date, d)) }
 }
 
-data class ExportResult(val zip: File, val summary: String, val reportHtml: String, val dash: Dashboard = Dashboard())
+data class ExportResult(val zip: File, val summary: String, val reportHtml: String, val dash: Dashboard = Dashboard(),
+                        val trend: List<TrendDay> = emptyList())
+
+/** One day of the start-screen trends. */
+data class TrendDay(val date: LocalDate, val steps: Long?, val sleepMin: Double?, val napMin: Double?, val hrAvg: Double?, val restingHr: Long?) {
+    fun merge(o: TrendDay) = TrendDay(date, maxOf(steps ?: 0, o.steps ?: 0).takeIf { steps != null || o.steps != null },
+        o.sleepMin ?: sleepMin, o.napMin ?: napMin, o.hrAvg ?: hrAvg, o.restingHr ?: restingHr)
+
+    fun json(): org.json.JSONObject = org.json.JSONObject().put("d", date.toString()).apply {
+        steps?.let { put("s", it) }; sleepMin?.let { put("sl", it) }; napMin?.let { put("n", it) }
+        hrAvg?.let { put("h", it) }; restingHr?.let { put("r", it) }
+    }
+
+    companion object {
+        fun of(days: Days): List<TrendDay> = days.map.entries.toList().takeLast(60).map { (date, d) ->
+            TrendDay(date, d.steps.takeIf { it > 0 }, if (d.nights > 0) d.sleepMin else null, if (d.naps > 0) d.napMin else null,
+                if (d.hrN > 0) d.hrSum.toDouble() / d.hrN else null, d.restingHr)
+        }
+
+        fun parse(o: org.json.JSONObject) = TrendDay(LocalDate.parse(o.getString("d")),
+            if (o.has("s")) o.getLong("s") else null, if (o.has("sl")) o.getDouble("sl") else null, if (o.has("n")) o.getDouble("n") else null,
+            if (o.has("h")) o.getDouble("h") else null, if (o.has("r")) o.getLong("r") else null)
+
+        /** Stored trend + new days, newest 60 days. */
+        fun merge(old: List<TrendDay>, new: List<TrendDay>): List<TrendDay> {
+            val m = java.util.TreeMap<LocalDate, TrendDay>()
+            (old + new).forEach { d -> m[d.date] = m[d.date]?.merge(d) ?: d }
+            return m.values.toList().takeLast(60)
+        }
+    }
+}
 
 /** What the start screen shows; merged across exports/syncs and persisted as JSON. */
 data class Dashboard(

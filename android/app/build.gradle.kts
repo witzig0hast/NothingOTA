@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.witzig0hast.cmfexport"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     // Fixed, non-secret key (password "android", like every Android debug key) so that
