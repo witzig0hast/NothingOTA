@@ -41,13 +41,61 @@ class Prefs(ctx: Context) {
     var autoUpload: Boolean
         get() = p.getBoolean("auto_upload", true)
         set(v) = p.edit().putBoolean("auto_upload", v).apply()
+    var voice: Boolean
+        get() = p.getBoolean("voice", true)
+        set(v) = p.edit().putBoolean("voice", v).apply()
+    var useRoute: Boolean
+        get() = p.getBoolean("use_route", false)
+        set(v) = p.edit().putBoolean("use_route", v).apply()
+    var layer: Layer
+        get() = runCatching { Layer.valueOf(p.getString("layer", "STANDARD")!!) }.getOrDefault(Layer.STANDARD)
+        set(v) = p.edit().putString("layer", v.name).apply()
+    var weeklyGoalKm: Int
+        get() = p.getInt("goal_km", 20)
+        set(v) = p.edit().putInt("goal_km", v).apply()
+    var saveToHealthConnect: Boolean
+        get() = p.getBoolean("hc_write", false)
+        set(v) = p.edit().putBoolean("hc_write", v).apply()
+    var countdown: Boolean
+        get() = p.getBoolean("countdown", true)
+        set(v) = p.edit().putBoolean("countdown", v).apply()
+    var hcAsked: Boolean
+        get() = p.getBoolean("hc_asked", false)
+        set(v) = p.edit().putBoolean("hc_asked", v).apply()
+    var onboarded: Boolean
+        get() = p.getBoolean("onboarded", false)
+        set(v) = p.edit().putBoolean("onboarded", v).apply()
 
     val profile get() = Profile(weight, age, male, maxHr)
+}
+
+/** Colours a track by pace: blue (slow) … green … red (fast), smoothed over ~15 s. */
+object Pace {
+    fun colors(pts: List<TrackPoint>): IntArray {
+        if (pts.size < 2) return IntArray(0)
+        var j = 0
+        val speeds = DoubleArray(pts.size - 1) { k ->
+            val i = k + 1
+            while (pts[i].time - pts[j].time > 15_000 && j < i - 1) j++
+            val dt = (pts[i].time - pts[j].time) / 1000.0
+            if (dt > 0) (pts[i].distance - pts[j].distance) / dt else 0.0
+        }
+        val moving = speeds.filter { it > 0.3 }.sorted()
+        val median = moving.getOrElse(moving.size / 2) { 1.0 }
+        // colour range: 10th..90th percentile, but at least ±12 % around the median pace
+        val lo = min(moving.getOrElse(moving.size / 10) { 0.0 }, median * 0.88)
+        val hi = max(moving.getOrElse(moving.size * 9 / 10) { 1.0 }, median * 1.12)
+        return IntArray(speeds.size) { k ->
+            val t = ((speeds[k] - lo) / max(hi - lo, 0.1)).coerceIn(0.0, 1.0).toFloat()
+            Color.HSVToColor(floatArrayOf(220f - 220f * t, 0.85f, 0.95f))
+        }
+    }
 }
 
 /** Draws the route as a line coloured by speed (slow = blue … fast = red), start/end markers. */
 class RouteView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
     private var pts: List<TrackPoint> = emptyList()
+    var dark = false
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 9f; strokeCap = Paint.Cap.ROUND }
     private val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 16f; strokeCap = Paint.Cap.ROUND; color = 0x33000000 }
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -57,6 +105,7 @@ class RouteView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = n
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
+        if (dark) grid.color = 0xFF262626.toInt()
         for (i in 1..5) { c.drawLine(0f, h * i / 6, w, h * i / 6, grid); c.drawLine(w * i / 6, 0f, w * i / 6, h, grid) }
         if (pts.size < 2) return
         val lat0 = pts.sumOf { it.lat } / pts.size
@@ -69,24 +118,11 @@ class RouteView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = n
         fun px(i: Int) = ox + ((xs[i] - minX).toFloat() * scale)
         fun py(i: Int) = h - (oy + ((ys[i] - minY).toFloat() * scale))
 
-        // speed per segment, smoothed over ~15 s so the colour follows real pace changes, not GPS noise
-        var j = 0
-        val speeds = (1 until pts.size).map { i ->
-            while (pts[i].time - pts[j].time > 15_000 && j < i - 1) j++
-            val dt = (pts[i].time - pts[j].time) / 1000.0
-            if (dt > 0) (pts[i].distance - pts[j].distance) / dt else 0.0
-        }
-        val moving = speeds.filter { it > 0.3 }.sorted()
-        val median = moving.getOrElse(moving.size / 2) { 1.0 }
-        // colour range: 10th..90th percentile, but at least ±12 % around the median pace
-        val lo = min(moving.getOrElse(moving.size / 10) { 0.0 }, median * 0.88)
-        val hi = max(moving.getOrElse(moving.size * 9 / 10) { 1.0 }, median * 1.12)
-
+        val colors = Pace.colors(pts)
         val path = Path().apply { moveTo(px(0), py(0)); for (i in 1 until pts.size) lineTo(px(i), py(i)) }
         c.drawPath(path, shadow)
         for (i in 1 until pts.size) {
-            val t = ((speeds[i - 1] - lo) / max(hi - lo, 0.1)).coerceIn(0.0, 1.0).toFloat()
-            line.color = Color.HSVToColor(floatArrayOf(220f - 220f * t, 0.85f, 0.95f))
+            line.color = colors[i - 1]
             c.drawLine(px(i - 1), py(i - 1), px(i), py(i), line)
         }
         dot.color = 0xFF2EBD59.toInt(); c.drawCircle(px(0), py(0), 14f, dot)
@@ -129,3 +165,35 @@ class ChartView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = n
         c.drawText("${label(if (invert) minY else maxY)} – ${label(if (invert) maxY else minY)}", 0f, 28f, text)
     }
 }
+
+/** Weekly bars (distance), current week highlighted, labels below. */
+class BarChartView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
+    private var values: List<Double> = emptyList()
+    private var labels: List<String> = emptyList()
+    private var goal: Double? = null
+    private val bar = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f; color = ctx.getColor(R.color.muted); textAlign = Paint.Align.CENTER }
+    private val goalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ctx.getColor(R.color.brand); strokeWidth = 3f; pathEffect = android.graphics.DashPathEffect(floatArrayOf(12f, 10f), 0f)
+    }
+    private val brand = ctx.getColor(R.color.brand)
+    private val muted = ctx.getColor(R.color.stage_light)
+
+    fun set(values: List<Double>, labels: List<String>, goal: Double? = null) { this.values = values; this.labels = labels; this.goal = goal; invalidate() }
+
+    override fun onDraw(c: Canvas) {
+        if (values.isEmpty()) return
+        val w = width.toFloat(); val h = height.toFloat() - 36f
+        val maxV = max(values.max(), goal ?: 0.0).coerceAtLeast(1.0)
+        val slot = w / values.size; val bw = slot * 0.6f
+        values.forEachIndexed { i, v ->
+            val x = i * slot + (slot - bw) / 2
+            val top = h - (v / maxV * (h - 10)).toFloat()
+            bar.color = if (i == values.lastIndex) brand else muted
+            c.drawRoundRect(android.graphics.RectF(x, top, x + bw, h), 8f, 8f, bar)
+            if (i % 2 == values.lastIndex % 2) c.drawText(labels.getOrElse(i) { "" }, x + bw / 2, h + 30f, text)
+        }
+        goal?.let { g -> val y = h - (g / maxV * (h - 10)).toFloat(); c.drawLine(0f, y, w, y, goalPaint) }
+    }
+}
+

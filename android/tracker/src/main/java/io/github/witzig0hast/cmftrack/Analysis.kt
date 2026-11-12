@@ -13,13 +13,24 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 object Analysis {
-    /** Heart rate at time t: nearest sample within 15 s. */
+    /**
+     * Heart rate at time t: the nearest sample within 15 s, otherwise linear interpolation between
+     * the neighbours if they are at most 10 min apart (the watch measures only every few minutes
+     * when no workout runs on the watch itself).
+     */
     fun hrAt(hr: List<Pair<Long, Int>>, t: Long): Int? {
         if (hr.isEmpty()) return null
         var lo = 0; var hi = hr.size - 1
         while (lo < hi) { val m = (lo + hi) / 2; if (hr[m].first < t) lo = m + 1 else hi = m }
-        val best = listOfNotNull(hr.getOrNull(lo), hr.getOrNull(lo - 1)).minByOrNull { kotlin.math.abs(it.first - t) } ?: return null
-        return best.second.takeIf { kotlin.math.abs(best.first - t) <= 15_000 }
+        val after = hr.getOrNull(lo)?.takeIf { it.first >= t }
+        val before = (if (after != null) hr.getOrNull(lo - 1) else hr.getOrNull(lo))?.takeIf { it.first <= t }
+        val near = listOfNotNull(before, after).minByOrNull { kotlin.math.abs(it.first - t) }
+        if (near != null && kotlin.math.abs(near.first - t) <= 15_000) return near.second
+        if (before != null && after != null && after.first - before.first <= 600_000) {
+            val f = (t - before.first).toDouble() / (after.first - before.first)
+            return (before.second + f * (after.second - before.second)).toInt()
+        }
+        return null
     }
 
     /** km splits from stored points (moving time only) with average heart rate per split. */

@@ -16,6 +16,7 @@
         android:visibility="invisible" />
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
@@ -23,82 +24,86 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingBottom="24dp">
 
-            <TextView android:id="@+id/date" style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingHorizontal="4dp" />
-            <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingHorizontal="4dp" android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium" android:textStyle="bold" />
+            <FrameLayout android:layout_width="match_parent" android:layout_height="340dp">
+                <org.osmdroid.views.MapView android:id="@+id/map" android:layout_width="match_parent" android:layout_height="match_parent" />
+                <io.github.witzig0hast.cmftrack.RouteView android:id="@+id/route" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/surface" android:visibility="gone" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/layerButton" style="@style/MapButton" android:layout_gravity="top|end" android:layout_margin="12dp" app:icon="@drawable/ic_layers" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/fullButton" style="@style/MapButton" android:layout_gravity="bottom|end" android:layout_margin="12dp" app:icon="@drawable/ic_center" />
+            </FrameLayout>
 
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                app:contentPadding="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="16dp">
 
-                <io.github.witzig0hast.cmftrack.RouteView
-                    android:id="@+id/route"
-                    android:layout_width="match_parent"
-                    android:layout_height="260dp" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp">
-
-                <GridLayout
-                    android:id="@+id/stats"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:columnCount="3" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/hrCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp">
-
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Puls" />
-                    <TextView android:id="@+id/hrInfo" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" />
-                    <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/hrChart" android:layout_width="match_parent" android:layout_height="120dp" android:layout_marginTop="8dp" />
-                    <LinearLayout android:id="@+id/zones" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/loadHrButton"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Puls von der Uhr laden" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="16dp">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:id="@+id/date" style="@style/Label" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall" android:textStyle="bold" />
+                        <TextView android:id="@+id/notes" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/editButton" style="@style/Widget.Material3.Button.IconButton" android:layout_width="48dp" android:layout_height="48dp" app:icon="@drawable/ic_edit" />
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                    <TextView android:id="@+id/speedTitle" style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tempo" />
-                    <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/speedChart" android:layout_width="match_parent" android:layout_height="120dp" android:layout_marginTop="8dp" />
-                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Höhe" />
-                    <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/elevChart" android:layout_width="match_parent" android:layout_height="100dp" android:layout_marginTop="8dp" />
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <GridLayout android:id="@+id/stats" android:layout_width="match_parent" android:layout_height="wrap_content" android:columnCount="3" />
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:id="@+id/effortsCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bestleistungen" />
+                        <LinearLayout android:id="@+id/efforts" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Puls" />
+                        <TextView android:id="@+id/hrInfo" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" />
+                        <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/hrChart" android:layout_width="match_parent" android:layout_height="120dp" android:layout_marginTop="8dp" />
+                        <LinearLayout android:id="@+id/zones" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                        <com.google.android.material.button.MaterialButton android:id="@+id/loadHrButton" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Puls von der Uhr laden" app:icon="@drawable/ic_heart" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:id="@+id/speedTitle" style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tempo" />
+                        <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/speedChart" android:layout_width="match_parent" android:layout_height="120dp" android:layout_marginTop="8dp" />
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Höhenprofil" />
+                        <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/elevChart" android:layout_width="match_parent" android:layout_height="100dp" android:layout_marginTop="8dp" />
+                        <TextView android:id="@+id/cadTitle" style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Schrittfrequenz" />
+                        <io.github.witzig0hast.cmftrack.ChartView android:id="@+id/cadChart" android:layout_width="match_parent" android:layout_height="90dp" android:layout_marginTop="8dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:id="@+id/splitsCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Kilometer" />
+                        <LinearLayout android:id="@+id/splits" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView android:id="@+id/lapsCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:visibility="gone">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Runden" />
+                        <LinearLayout android:id="@+id/laps" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.button.MaterialButton android:id="@+id/shareButton" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="16dp" android:text="Als Bild teilen" app:icon="@drawable/ic_share" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/tcxButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:text="TCX" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/gpxButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:text="GPX" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/routeButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Als Route" />
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView android:id="@+id/splitsCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-                    <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Kilometer" />
-                    <LinearLayout android:id="@+id/splits" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/hcButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:text="Health Connect" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/uploadButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Home Assistant" />
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="horizontal">
-                <com.google.android.material.button.MaterialButton android:id="@+id/tcxButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:text="TCX teilen" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/gpxButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="GPX teilen" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/deleteButton" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Aktivität löschen" android:textColor="@color/brand" />
+                <TextView style="@style/Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="11sp"
+                    android:text="TCX enthält Puls und lässt sich in Strava, Garmin Connect oder Runalyze hochladen. „Als Route“ übernimmt die Strecke als Route für das nächste Training." />
             </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                <com.google.android.material.button.MaterialButton android:id="@+id/uploadButton" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:layout_weight="1" android:text="An Home Assistant" />
-                <com.google.android.material.button.MaterialButton android:id="@+id/deleteButton" style="@style/Widget.Material3.Button.TextButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Löschen" />
-            </LinearLayout>
-            <TextView style="@style/Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:gravity="center" android:textSize="11sp"
-                android:text="TCX lässt sich mit Puls in Strava, Garmin Connect oder Runalyze hochladen." />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

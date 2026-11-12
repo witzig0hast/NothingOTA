@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/tab_record" android:icon="@drawable/ic_run" android:title="Aufnahme" />
-    <item android:id="@+id/tab_history" android:icon="@drawable/ic_history" android:title="Verlauf" />
+    <item android:id="@+id/tab_history" android:icon="@drawable/ic_history" android:title="Aktivitäten" />
+    <item android:id="@+id/tab_stats" android:icon="@drawable/ic_stats" android:title="Statistik" />
     <item android:id="@+id/tab_profile" android:icon="@drawable/ic_person" android:title="Profil" />
 </menu>

@@ -19,12 +19,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
-import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.request.ReadRecordsRequest
-import androidx.health.connect.client.time.TimeRangeFilter
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -115,29 +109,5 @@ class HeartRateBle(private val ctx: Context, private val onHr: (Int) -> Unit, pr
         stopScan()
         runCatching { gatt?.disconnect(); gatt?.close() }
         gatt = null
-    }
-}
-
-/** Heart rate the watch recorded (synced by the CMF app into Health Connect). */
-object WatchHeartRate {
-    val PERMISSION = HealthPermission.getReadPermission(HeartRateRecord::class)
-    private val CMF = listOf("com.nothing.cmf.watch", "com.nothing.smartcenter", "com.nothing.cmf")
-
-    /** Returns samples in [start, end] and the app they came from; prefers the CMF app. */
-    suspend fun load(client: HealthConnectClient, start: Long, end: Long): Pair<List<Pair<Long, Int>>, String?> {
-        val bySource = mutableMapOf<String, MutableList<Pair<Long, Int>>>()
-        var token: String? = null
-        do {
-            val r = client.readRecords(ReadRecordsRequest(HeartRateRecord::class,
-                TimeRangeFilter.between(Instant.ofEpochMilli(start - 60_000), Instant.ofEpochMilli(end + 60_000)), pageToken = token))
-            r.records.forEach { rec ->
-                val list = bySource.getOrPut(rec.metadata.dataOrigin.packageName) { mutableListOf() }
-                rec.samples.forEach { s -> list += s.time.toEpochMilli() to s.beatsPerMinute.toInt() }
-            }
-            token = r.pageToken
-        } while (!token.isNullOrEmpty())
-        val src = bySource.keys.firstOrNull { k -> CMF.any { k.startsWith(it) } }
-            ?: bySource.maxByOrNull { it.value.size }?.key ?: return emptyList<Pair<Long, Int>>() to null
-        return bySource[src]!!.filter { it.first in start..end }.sortedBy { it.first } to src
     }
 }

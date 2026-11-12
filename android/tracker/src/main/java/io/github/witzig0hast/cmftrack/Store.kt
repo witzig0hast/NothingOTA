@@ -24,13 +24,30 @@ data class Activity(
     val splits: List<Split> = emptyList(),
     val hrSource: String? = null,
     val finished: Boolean = false,
+    val name: String? = null,
+    val notes: String? = null,
+    val origin: String = "phone",      // phone = recorded here, watch = imported from the watch
+    val watchId: String? = null,
+    val efforts: Map<String, Double> = emptyMap(), // best effort label -> seconds (see BestEfforts)
 ) {
     val elapsedMs get() = end - start
     val avgSpeed get() = if (movingMs > 0) distance / (movingMs / 1000.0) else 0.0
-    val title get() = "${sport.label} · ${Fmt.km(distance)} km"
+    val title get() = name?.takeIf { it.isNotBlank() } ?: defaultName()
+
+    /** "Morgenlauf", "Abendradtour" … like the big tracking apps */
+    fun defaultName(): String {
+        val h = java.time.Instant.ofEpochMilli(start).atZone(java.time.ZoneId.systemDefault()).hour
+        val t = when (h) { in 5..10 -> "Morgen"; in 11..13 -> "Mittags"; in 14..17 -> "Nachmittags"; in 18..21 -> "Abend"; else -> "Nacht" }
+        return when (sport) {
+            Sport.RUN -> "${t}lauf"; Sport.WALK -> "${t}spaziergang"; Sport.HIKE -> "${t}wanderung"
+            Sport.RIDE -> "${t}radtour"; Sport.INLINE -> "${t}-Skaten"; Sport.OTHER -> "${t}training"
+        }
+    }
 }
 
-class Store(ctx: Context) : SQLiteOpenHelper(ctx, "tracks.db", null, 1) {
+data class Lap(val n: Int, val time: Long, val distance: Double, val movingMs: Long)
+
+class Store(ctx: Context) : SQLiteOpenHelper(ctx, "tracks.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE activity (id INTEGER PRIMARY KEY AUTOINCREMENT, sport TEXT, start INTEGER, end INTEGER,
@@ -39,17 +56,45 @@ class Store(ctx: Context) : SQLiteOpenHelper(ctx, "tracks.db", null, 1) {
         db.execSQL("CREATE TABLE point (activity INTEGER, t INTEGER, lat REAL, lon REAL, alt REAL, dist REAL, moving INTEGER)")
         db.execSQL("CREATE INDEX point_a ON point(activity, t)")
         db.execSQL("CREATE TABLE hr (activity INTEGER, t INTEGER, bpm INTEGER, PRIMARY KEY(activity, t))")
+        onUpgrade(db, 1, 2)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            for (c in listOf("name TEXT", "notes TEXT", "origin TEXT DEFAULT 'phone'", "watch_id TEXT", "efforts TEXT")) db.execSQL("ALTER TABLE activity ADD COLUMN $c")
+            db.execSQL("ALTER TABLE point ADD COLUMN cadence INTEGER")
+            db.execSQL("CREATE TABLE lap (activity INTEGER, n INTEGER, t INTEGER, distance REAL, moving_ms INTEGER, PRIMARY KEY(activity, n))")
+        }
+    }
+
+    fun addLap(a: Long, l: Lap) = writableDatabase.insertWithOnConflict("lap", null, ContentValues().apply {
+        put("activity", a); put("n", l.n); put("t", l.time); put("distance", l.distance); put("moving_ms", l.movingMs)
+    }, SQLiteDatabase.CONFLICT_REPLACE)
+
+    fun laps(a: Long): List<Lap> = readableDatabase.rawQuery("SELECT n, t, distance, moving_ms FROM lap WHERE activity=? ORDER BY n", arrayOf(a.toString())).use { c ->
+        buildList { while (c.moveToNext()) add(Lap(c.getInt(0), c.getLong(1), c.getDouble(2), c.getLong(3))) }
+    }
+
+    fun cadence(a: Long): List<Pair<Long, Int>> =
+        readableDatabase.rawQuery("SELECT t, cadence FROM point WHERE activity=? AND cadence IS NOT NULL ORDER BY t", arrayOf(a.toString())).use { c ->
+            buildList { while (c.moveToNext()) add(c.getLong(0) to c.getInt(1)) }
+        }
+
+    fun byWatchId(id: String): Activity? = readableDatabase.rawQuery("SELECT * FROM activity WHERE watch_id=?", arrayOf(id)).use { c ->
+        if (c.moveToFirst()) read(c) else null
+    }
+
+    fun createImported(sport: Sport, start: Long, watchId: String): Long = writableDatabase.insert("activity", null, ContentValues().apply {
+        put("sport", sport.name); put("start", start); put("end", start); put("finished", 0); put("origin", "watch"); put("watch_id", watchId)
+    })
 
     fun create(sport: Sport, start: Long): Long = writableDatabase.insert("activity", null, ContentValues().apply {
         put("sport", sport.name); put("start", start); put("end", start); put("finished", 0)
     })
 
-    fun addPoint(a: Long, p: TrackPoint) = writableDatabase.insert("point", null, ContentValues().apply {
+    fun addPoint(a: Long, p: TrackPoint, cadence: Int? = null) = writableDatabase.insert("point", null, ContentValues().apply {
         put("activity", a); put("t", p.time); put("lat", p.lat); put("lon", p.lon); p.alt?.let { put("alt", it) }
-        put("dist", p.distance); put("moving", if (p.moving) 1 else 0)
+        put("dist", p.distance); put("moving", if (p.moving) 1 else 0); cadence?.let { put("cadence", it) }
     })
 
     fun addHr(a: Long, t: Long, bpm: Int) = writableDatabase.insertWithOnConflict("hr", null, ContentValues().apply {
@@ -72,11 +117,13 @@ class Store(ctx: Context) : SQLiteOpenHelper(ctx, "tracks.db", null, 1) {
         if (x.maxHr != null) put("max_hr", x.maxHr) else putNull("max_hr")
         if (x.kcal != null) put("kcal", x.kcal) else putNull("kcal")
         put("max_speed", x.maxSpeed); put("splits", splitsJson(x.splits)); put("hr_source", x.hrSource)
-        put("finished", if (x.finished) 1 else 0)
+        put("finished", if (x.finished) 1 else 0); put("name", x.name); put("notes", x.notes)
+        put("efforts", JSONObject(x.efforts as Map<*, *>).toString())
     }, "id=?", arrayOf(x.id.toString()))
 
     fun delete(id: Long) = writableDatabase.run {
         delete("point", "activity=?", arrayOf(id.toString())); delete("hr", "activity=?", arrayOf(id.toString()))
+        delete("lap", "activity=?", arrayOf(id.toString()))
         delete("activity", "id=?", arrayOf(id.toString()))
     }
 
@@ -107,6 +154,8 @@ class Store(ctx: Context) : SQLiteOpenHelper(ctx, "tracks.db", null, 1) {
             c.getDouble(i("elev_gain")), c.getDouble(i("elev_loss")), intOrNull("avg_hr"), intOrNull("max_hr"),
             if (c.isNull(i("kcal"))) null else c.getDouble(i("kcal")), c.getDouble(i("max_speed")),
             parseSplits(c.getString(i("splits"))), c.getString(i("hr_source")), c.getInt(i("finished")) == 1,
+            c.getString(i("name")), c.getString(i("notes")), c.getString(i("origin")) ?: "phone", c.getString(i("watch_id")),
+            runCatching { JSONObject(c.getString(i("efforts"))).let { o -> o.keys().asSequence().associateWith { o.getDouble(it) } } }.getOrDefault(emptyMap()),
         )
     }
 

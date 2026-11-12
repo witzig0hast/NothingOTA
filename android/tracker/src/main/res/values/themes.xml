@@ -16,6 +16,9 @@
         <item name="android:navigationBarColor">@color/bg</item>
         <item name="android:windowLightStatusBar">@bool/light_bars</item>
         <item name="materialCardViewStyle">@style/Card</item>
+        <item name="elevationOverlayEnabled">false</item>
+        <item name="colorSurfaceContainer">@color/surface</item>
+        <item name="colorSurfaceContainerLow">@color/surface</item>
     </style>
 
     <style name="Card" parent="Widget.Material3.CardView.Elevated">
@@ -53,5 +56,13 @@
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textColor">@color/on_surface</item>
         <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+    <style name="MapButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="backgroundTint">@color/surface</item>
+        <item name="iconTint">@color/on_surface</item>
+        <item name="elevation">3dp</item>
     </style>
 </resources>

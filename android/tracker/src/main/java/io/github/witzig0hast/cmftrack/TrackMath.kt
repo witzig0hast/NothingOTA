@@ -272,7 +272,8 @@ data class Profile(val weightKg: Double = 75.0, val age: Int = 35, val male: Boo
     fun zones(hr: List<Pair<Long, Int>>): DoubleArray {
         val out = DoubleArray(5)
         for (i in 1 until hr.size) {
-            val dt = ((hr[i].first - hr[i - 1].first) / 1000.0).coerceAtMost(30.0)
+            // sparse all-day samples (every few minutes) still count; gaps over 10 min do not
+            val dt = ((hr[i].first - hr[i - 1].first) / 1000.0).let { if (it > 600) 0.0 else it }
             val pct = hr[i - 1].second.toDouble() / hrMax
             val z = ((pct - 0.5) * 10).toInt()
             if (z >= 0) out[min(z, 4)] += dt
@@ -282,6 +283,10 @@ data class Profile(val weightKg: Double = 75.0, val age: Int = 35, val male: Boo
 }
 
 object Fmt {
+    fun ago(ms: Long): String {
+        val m = (System.currentTimeMillis() - ms) / 60_000
+        return when { m < 1 -> "gerade eben"; m < 60 -> "vor $m min"; m < 1440 -> "vor ${m / 60} h"; else -> "vor ${m / 1440} Tagen" }
+    }
     fun duration(sec: Double): String {
         val s = sec.toLong()
         return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)

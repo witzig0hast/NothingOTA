@@ -92,7 +92,8 @@ class TrackerTest {
         val hc = FakeHealthConnectClient(packageName = "com.nothing.cmf.watch")
         val samples = (0 until 960 step 5).map { HeartRateRecord.Sample(Instant.ofEpochMilli(t0 + it * 1000L), 140L + it / 30) }
         hc.insertRecords(listOf(HeartRateRecord(Instant.ofEpochMilli(t0), ZoneOffset.UTC, Instant.ofEpochMilli(end), ZoneOffset.UTC, samples, Metadata.manualEntry())))
-        val (hr, src) = WatchHeartRate.load(hc, t0, end)
+        val res = Watch.heartRate(hc, t0, end)
+        val hr = res.samples; val src = res.source
         assertEquals(192, hr.size); assertEquals("com.nothing.cmf.watch", src)
         store.replaceHr(id, hr)
         val a = Analysis.withHeartRate(store.get(id)!!, store.points(id), hr, Profile(), src)
@@ -130,6 +131,80 @@ class TrackerTest {
         shadowOf(android.os.Looper.getMainLooper()).idle()
         shoot(act.findViewById(R.id.root), "record")
         Recorder.state.value = LiveState()
+    }
+
+    @Test
+    fun watchWorkoutImportWithRouteAndSparseHeartRate() = runTest {
+        val hc = FakeHealthConnectClient(packageName = "com.nothing.cmf.watch")
+        val locs = loop().map { l ->
+            androidx.health.connect.client.records.ExerciseRoute.Location(Instant.ofEpochMilli(l.time), l.latitude, l.longitude,
+                androidx.health.connect.client.units.Length.meters(4.0), null, androidx.health.connect.client.units.Length.meters(l.altitude))
+        }
+        val end = t0 + 961_000
+        val session = androidx.health.connect.client.records.ExerciseSessionRecord(Instant.ofEpochMilli(t0), ZoneOffset.UTC, Instant.ofEpochMilli(end), ZoneOffset.UTC,
+            Metadata.manualEntry(), androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, "Lauf auf der Uhr", null,
+            emptyList(), emptyList(), androidx.health.connect.client.records.ExerciseRoute(locs), null)
+        // the watch measured only every 4 minutes
+        val hr = (0..4).map { HeartRateRecord.Sample(Instant.ofEpochMilli(t0 + it * 240_000L), 130L + it * 5) }
+        hc.insertRecords(listOf(session, HeartRateRecord(Instant.ofEpochMilli(t0), ZoneOffset.UTC, Instant.ofEpochMilli(end), ZoneOffset.UTC, hr, Metadata.manualEntry())))
+
+        val workouts = Watch.workouts(hc, 36500)
+        assertEquals(1, workouts.size); assertEquals(Sport.RUN, workouts[0].sport)
+        val id = WatchImport.import(ctx, hc, workouts[0], null)
+        val a = Store(ctx).get(id)!!
+        assertEquals("watch", a.origin); assertEquals("Lauf auf der Uhr", a.title)
+        assertTrue("distance ${a.distance}", kotlin.math.abs(a.distance - 3000) < 90)
+        assertEquals(140.0, a.avgHr!!.toDouble(), 1.0)
+        assertTrue(a.efforts.containsKey("1 km"))
+        // importing twice does not duplicate
+        assertEquals(id, WatchImport.import(ctx, hc, workouts[0], null))
+        // sparse samples are interpolated for every track point (TCX)
+        assertEquals(137, Analysis.hrAt(Store(ctx).heartRates(id), t0 + 360_000)) // between 135 (4 min) and 140 (8 min)
+        val explain = Watch.HrResult(emptyList(), null, null).explain(t0, end)
+        assertTrue(explain, explain.contains("Health Connect"))
+    }
+
+    @Test
+    fun plannedRouteAndBestEfforts() {
+        val smooth = TrackStats(Sport.RUN).also { st -> loop().forEach { l -> st.addFix(Fix(l.time, l.latitude, l.longitude, l.altitude, l.accuracy, l.speed)) } }
+        val gpx = Exporters.gpx(Activity(1, Sport.RUN, t0, t0 + 1000, finished = true), smooth.points, emptyList())
+        val r = PlannedRoute.parseGpx(gpx.byteInputStream(), "x")
+        assertTrue("length ${r.length}", r.length in 2950.0..3200.0)
+        val (off, along) = r.locate(r.points[200].first + 50 / 111_195.0, r.points[200].second)
+        assertTrue("off $off", off in 30.0..70.0); assertTrue("along $along", along in 500.0..800.0)
+        assertTrue(r.locate(r.points[400].first, r.points[400].second).first < 5)
+
+        val s = TrackStats(Sport.RUN)
+        loop().forEach { l -> s.addFix(Fix(l.time, l.latitude, l.longitude, l.altitude, l.accuracy, l.speed)) }
+        val e = BestEfforts.compute(s.points)
+        assertEquals(setOf("400 m", "1 km", "1 Meile"), e.keys)
+        assertEquals(320.0, e["1 km"]!!, 8.0)                // 5:20 /km
+        assertEquals(Stats.weekStart(t0), Stats.weekStart(t0 + 3_600_000))
+    }
+
+    @Test
+    fun historyAndStatsScreenshots() {
+        val store = Store(ctx)
+        val now = System.currentTimeMillis()
+        for ((k, km) in listOf(0 to 3, 2 to 5, 9 to 8, 16 to 4, 30 to 10).withIndex()) {
+            val start = now - km.first * 86_400_000L - 3_600_000
+            val id = store.create(Sport.RUN, start)
+            val s = TrackStats(Sport.RUN)
+            val pace = 300.0 + k * 8
+            loop().take((km.second * 1000 / (1000 / pace)).toInt().coerceAtMost(960)).forEach { l ->
+                if (s.addFix(Fix(start + (l.time - t0), l.latitude, l.longitude, l.altitude, l.accuracy, l.speed))) store.addPoint(id, s.points.last())
+            }
+            val pts = store.points(id)
+            store.save(Activity(id, Sport.RUN, start, start + s.movingMs, s.distance, s.movingMs, s.elevationGain, 0.0, 150 - k, 170, 300.0, s.maxSpeed,
+                s.splits, "Uhr (Health Connect)", true, efforts = BestEfforts.compute(pts)))
+        }
+        val act = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        act.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav).selectedItemId = R.id.tab_history
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        shoot(act.findViewById(R.id.root), "history")
+        act.findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.nav).selectedItemId = R.id.tab_stats
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        shoot(act.findViewById(R.id.root), "stats")
     }
 
     @Test
