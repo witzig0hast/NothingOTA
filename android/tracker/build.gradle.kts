@@ -13,6 +13,8 @@ android {
         targetSdk = 36
         versionCode = 3
         versionName = "3.0"
+        // phones are ARM; x86 builds of the map library only matter for emulators
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
     signingConfigs {
         create("shared") {

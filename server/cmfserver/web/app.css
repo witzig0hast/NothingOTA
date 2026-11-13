@@ -132,3 +132,4 @@ svg.chart text{fill:var(--muted);font-size:11px}
 .msg.ai{align-self:flex-start;background:var(--surface2);border-bottom-left-radius:6px}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:999px;z-index:3000;font-size:14px}
 .empty{padding:28px;text-align:center;color:var(--muted)}
+.maplibregl-ctrl-attrib{font-size:10px}

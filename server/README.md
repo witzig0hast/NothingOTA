@@ -1,15 +1,84 @@
-# cmfserver – CMF Watch → Home Assistant
+# CMF Health – Website, KI-Analyse und Home Assistant für die CMF Watch
 
-Kleiner Docker-Container, der die Daten deiner CMF Watch Pro 3 annimmt, in einer SQLite-Datenbank
-zusammenführt und an **Home Assistant** weitergibt. Bei MQTT legt Home Assistant über MQTT Discovery
-automatisch ein Gerät „CMF Watch Pro 3“ mit 31 Sensoren an. Alternativ geht es über die REST-API.
+`cmfserver` ist ein Docker-Container mit vier Teilen:
+- **Website zum Anmelden** auf deiner eigenen Subdomain, mit Übersicht, Schlaf (Hypnogramm), Herz & Atmung,
+  Aktivität mit Karten, KI-Coach und Konto
+- **Gesundheits-Hinweise:** Er erkennt Auffälligkeiten bei Atmung (nächtliche Sauerstoffabfälle,
+  Atemfrequenz), Ruhepuls, HRV, Stress und Schlaf, immer im Vergleich mit deinen eigenen Werten
+- **KI-Analyse** über deinen LiteLLM-, Ollama- oder OpenAI-kompatiblen Endpunkt: Wochenbericht und „Frag deine Daten“
+- **Home Assistant:** Die Werte gehen per MQTT Discovery dorthin, ein Gerät pro Konto
+
+Die Daten kommen aus den Apps **CMF Export** (Schlaf, Puls, SpO₂, Schritte … alle 15 min) und **CMF Track**
+(Trainings mit GPS und Puls). Jedes Konto hat ein eigenes kurzes App-Token (`cmf-xxxxxxxxxxxx`), das auf der
+Website unter **Konto** steht. Dort gibt es auch Knöpfe, die die Apps mit einem Tipp verbinden.
 
 ```
-CMF Watch ──BT──> CMF-App ──> Health Connect ─┐
-                                              ├─> CMF-Export-App ──HTTP──> cmfserver ──MQTT──> Home Assistant
-CMF Watch ──BT──> Gadgetbridge ── Auto-Export ┘                              ▲
-                                  └── Syncthing/Nextcloud ──> /import ───────┘
+Uhr ─BT─> CMF-App ─> Health Connect ─> CMF Export ─┐
+Handy-GPS + Puls der Uhr ─────────> CMF Track ─────┼─HTTPS─> cmfserver ──> Website (health.example.de)
+Gadgetbridge (optional) ─> /import ────────────────┘            └──MQTT──> Home Assistant
 ```
+
+## Installation auf einer Subdomain
+
+1. **DNS:** Einen Eintrag für die Subdomain (z. B. `health.example.de`) auf deinen Server zeigen lassen.
+2. **Stack holen:**
+   ```bash
+   git clone https://github.com/witzig0hast/NothingOTA.git
+   cd NothingOTA/server/stack
+   ```
+3. **`docker-compose.yml` anpassen:**
+   - `PUBLIC_URL: "https://health.example.de"`
+   - optional KI: `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` (dein LiteLLM-Endpunkt)
+   - optional Home Assistant: `MQTT_HOST` (der mitgelieferte Mosquitto ist vorkonfiguriert)
+4. **Starten:**
+   - **Ohne eigenen Reverse-Proxy:** In `Caddyfile` die Subdomain eintragen, dann
+     `docker compose --profile https up -d`. Caddy holt das HTTPS-Zertifikat selbst; die Ports 80 und 443
+     müssen auf den Rechner zeigen.
+   - **Mit eigenem Proxy** (Nginx Proxy Manager, Traefik, Caddy …): `docker compose up -d` und die Subdomain auf
+     `http://<server>:8080` weiterleiten. Der Proxy muss `X-Forwarded-Proto: https` setzen (machen alle
+     gängigen); dann bekommen die Login-Cookies automatisch das `Secure`-Flag.
+5. **Konto anlegen:** `https://health.example.de` öffnen und registrieren. Das **erste Konto wird Admin**,
+   danach ist die Registrierung geschlossen (`SIGNUP: open` öffnet sie). Weitere Konten legst du als Admin
+   unter **Konto → Benutzer** an.
+6. **Handy verbinden:** Die Website am Handy öffnen, **Konto → „CMF Export verbinden“** und
+   **„CMF Track verbinden“** antippen. Adresse und Token werden automatisch eingetragen.
+7. **Home Assistant (optional):** *Einstellungen → Geräte & Dienste → MQTT* → Broker = IP des Servers, Port 1883.
+
+**Update:** `docker compose pull && docker compose up -d`. Eine Datenbank aus der Version 1.x wird automatisch
+dem ersten Konto zugeordnet.
+
+### KI-Analyse (LiteLLM)
+
+Jeder OpenAI-kompatible Endpunkt geht, zum Beispiel:
+- **LiteLLM-Proxy:** `LLM_BASE_URL=http://litellm:4000`, `LLM_MODEL=<Modellname in LiteLLM>`, `LLM_API_KEY=<Key>`
+- **Ollama direkt:** `LLM_BASE_URL=http://ollama:11434/v1`, `LLM_MODEL=llama3.1:8b`, ohne Key
+
+Gesendet wird nur eine kompakte Zusammenfassung: Tageswerte, Nächte, Sauerstoff- und Atemwerte pro Nacht,
+erkannte Hinweise und Trainings. Rohdaten wie einzelne Pulsmessungen gehen nicht raus. Das hält
+Anfragen klein, schnell und datensparsam. Ohne KI funktionieren alle regelbasierten Hinweise trotzdem.
+
+> **Hinweis:** Die Analysen beruhen auf Uhren-Sensoren und ersetzen keine ärztliche Untersuchung. Bei Atemnot,
+> Brustschmerzen oder anhaltenden Beschwerden ärztlich abklären lassen.
+
+### Was die Uhr messen kann
+
+Die CMF Watch Pro 3 liefert über die CMF-App: Schlaf mit Phasen, Puls, SpO₂, Schritte, Kalorien und Trainings.
+Ohne Gadgetbridge kommen Stress, HRV und Atemfrequenz nicht an. Für Atmung und Asthma-Verlauf in der CMF-App
+diese Messungen einschalten:
+- **Sauerstoff (SpO₂):** automatisch beziehungsweise im Schlaf messen
+- **Herzfrequenz:** kontinuierlich messen
+- **Health Connect:** alle Datentypen freigeben
+
+## Sicherheit
+
+- **Passwörter:** mit scrypt gespeichert. Login-Versuche sind begrenzt (10 Fehlversuche in 10 Minuten).
+- **Sitzung:** Cookie mit `HttpOnly`, `SameSite=Lax` und hinter HTTPS `Secure`, dazu CSRF-Schutz und strenge
+  Content-Security-Policy. Die Website lädt keine fremden Skripte.
+- **App-Token:** dürfen nur Daten senden und lesen; Kontoeinstellungen gehen nur nach Login auf der Website.
+  Ein neues Token macht das alte sofort ungültig.
+- **Daten:** jedes Konto sieht nur seine eigenen. **Konto → Alle Daten herunterladen** und **Konto löschen**
+  sind eingebaut (DSGVO).
+- **Karten:** OpenFreeMap (Vektorkarten auf Basis von OpenStreetMap), ohne Konto und ohne Tracking.
 
 ## Sensoren in Home Assistant
 
@@ -30,51 +99,6 @@ Home Assistant speichert den Verlauf selbst, so bekommst du Langzeit-Statistiken
 Den Verlauf vor der ersten Synchronisierung kann Home Assistant nicht nachträglich übernehmen.
 Er liegt aber im Server und ist über `/api/history` abrufbar.
 
-## Installation (Home Assistant im Docker-Container)
-
-Du brauchst nur Docker auf dem Rechner, auf dem auch Home Assistant läuft (oder einem anderen im Heimnetz).
-Das fertige Image `ghcr.io/witzig0hast/cmfserver:latest` gibt es für PC/NAS (amd64) und Raspberry Pi (arm64/armv7).
-
-1. **Ordner holen:** Ordner `server/stack/` aus diesem Repo auf den Docker-Rechner kopieren, z. B.
-   ```bash
-   git clone https://github.com/witzig0hast/NothingOTA.git
-   cd NothingOTA/server/stack
-   ```
-2. **Token setzen:** In `docker-compose.yml` `API_TOKEN` auf ein eigenes Passwort setzen
-   (z. B. Ausgabe von `openssl rand -hex 24`).
-3. **Starten:**
-   ```bash
-   docker compose up -d
-   ```
-   Das startet **Mosquitto** (MQTT-Broker, Port 1883) und **cmfserver** (Port 8080).
-   Hast du schon einen MQTT-Broker, lösche den `mosquitto`-Block und trage bei `MQTT_HOST` dessen IP ein
-   (plus `MQTT_USER`/`MQTT_PASSWORD`).
-4. **Home Assistant mit MQTT verbinden:** *Einstellungen → Geräte & Dienste → Integration hinzufügen →
-   MQTT* → Broker = IP des Docker-Rechners (z. B. `192.168.1.10`), Port `1883`, Benutzer leer lassen.
-   Läuft Home Assistant mit `network_mode: host` auf demselben Rechner, geht auch `127.0.0.1`.
-5. **Prüfen:** `http://<IP>:8080/?token=<API_TOKEN>` im Browser öffnen. Dort steht „Weiterleitung an: Mqtt“.
-6. **Handy einrichten:**
-   - **CMF Export:** Auf der Karte „Home Assistant“ Adresse `http://<IP>:8080` und Token eintragen,
-     „Testen“ antippen, „Automatisch senden“ einschalten.
-   - **CMF Track:** Unter *Profil → Home Assistant* dieselben Daten eintragen.
-
-Nach dem ersten Senden erscheint unter *Einstellungen → Geräte & Dienste → MQTT* das Gerät
-**CMF Watch Pro 3** mit allen Sensoren.
-
-**Update:** `docker compose pull && docker compose up -d`
-
-**MQTT mit Passwort (optional):** In `mosquitto/mosquitto.conf` `allow_anonymous false` und
-`password_file /mosquitto/config/passwd` setzen, dann
-`docker compose exec mosquitto mosquitto_passwd -c /mosquitto/config/passwd cmf`.
-Damit das funktioniert, die Konfiguration ohne `:ro` einbinden. In cmfserver `MQTT_USER`/`MQTT_PASSWORD` und
-in Home Assistant dieselben Zugangsdaten eintragen.
-
-### Selbst bauen statt fertigem Image
-
-```bash
-docker compose -f server/docker-compose.yml up -d --build   # im Repo-Verzeichnis, nutzt server/Dockerfile
-```
-
 ## Wege, wie Daten zum Server kommen
 
 | Weg | Wie |
@@ -92,7 +116,7 @@ Schritte, Distanz und Kalorien eines Tages werden nie kleiner.
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `API_TOKEN` | – | Token für API, Upload und Statusseite (*bitte setzen*). Alternativ `API_TOKEN_FILE` |
+| `API_TOKEN` | – | Nur für Installationen der Version 1.x: altes Token gilt weiter für das erste Konto |
 | `MQTT_HOST`, `MQTT_PORT` | –, `1883` | MQTT-Broker (aktiviert MQTT Discovery) |
 | `MQTT_USER`, `MQTT_PASSWORD` | – | MQTT-Anmeldung (auch `MQTT_PASSWORD_FILE`) |
 | `MQTT_TLS` | `false` | TLS zum Broker |
@@ -104,6 +128,11 @@ Schritte, Distanz und Kalorien eines Tages werden nie kleiner.
 | `PUBLISH_INTERVAL` | `300` | Sekunden zwischen erneutem Senden (Tageswechsel, Reconnect) |
 | `WATCH_INTERVAL` | `60` | Sekunden zwischen Prüfungen des Import-Ordners |
 | `MAX_UPLOAD_MB` | `512` | Maximale Uploadgröße |
+| `PUBLIC_URL` | – | Öffentliche Adresse (`https://health.example.de`), für die Verbindungs-Links der Apps |
+| `SIGNUP` | `first` | `first` = nur das erste Konto registriert sich selbst, `open` = jeder |
+| `COOKIE_SECURE` | `auto` | `auto` (nach `X-Forwarded-Proto`), `true` oder `false` |
+| `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | – | KI-Endpunkt (LiteLLM/Ollama/OpenAI-kompatibel), Key auch als `LLM_API_KEY_FILE` |
+| `LLM_TIMEOUT` | `120` | Sekunden für eine KI-Antwort |
 
 Die REST-Variante legt `sensor.cmf_watch_<name>` direkt an. Diese Zustände überleben aber keinen
 Neustart von Home Assistant, bis die nächste Aktualisierung kommt (spätestens nach `PUBLISH_INTERVAL`).
@@ -111,16 +140,20 @@ MQTT ist deshalb die bessere Wahl.
 
 ## API
 
-Alle Endpunkte außer `/healthz` brauchen `Authorization: Bearer <API_TOKEN>` (oder `?token=`).
+Website: Anmeldung per Cookie. Apps und Skripte: `Authorization: Bearer <App-Token>`.
 
 | Methode | Pfad | |
 |---|---|---|
-| `POST` | `/api/upload` | Datei als Body (oder Formular-Upload): Export-ZIP der App, Gadgetbridge-DB oder -ZIP |
-| `GET` | `/api/latest` | aktuelle Werte + Attribute (JSON) |
-| `GET` | `/api/history?metric=heart_rate&days=7` | Verlauf: `heart_rate`, `spo2`, `stress`, `resting_hr`, `hrv`, `weight`, `sleep`, `daily` |
-| `GET` | `/api/uploads` | letzte Importe |
-| `POST` | `/api/publish` | sofort an Home Assistant senden |
-| `GET` | `/` | Statusseite mit Upload-Formular |
+| `POST` | `/api/upload` | Datei als Body: Export-ZIP der Apps, Gadgetbridge-DB oder -ZIP |
+| `GET` | `/api/latest` | aktuelle Werte (wie in Home Assistant) |
+| `GET` | `/api/dashboard` | alles für die Übersicht inkl. Hinweisen und Erholung |
+| `GET` | `/api/sleep?days=30` | Nächte und Nickerchen mit Phasen und SpO₂ |
+| `GET` | `/api/series?metric=heart_rate&days=7` | Zeitreihe: `heart_rate`, `spo2`, `stress`, `hrv`, `respiratory_rate`, `resting_hr`, `battery`, `weight` |
+| `GET` | `/api/daily?days=90` | Tageswerte |
+| `GET` | `/api/workouts`, `/api/workouts/<start_ts>` | Trainings, einzeln mit GPS-Strecke und Puls |
+| `GET` | `/api/insights` | regelbasierte Hinweise |
+| `POST` | `/api/ai/report`, `/api/ai/chat` | KI-Bericht / Frage stellen |
+| `GET` | `/api/export` | alle eigenen Daten als JSON |
 | `GET` | `/healthz` | Health-Check |
 
 ## Beispiel: Dashboard-Karte
@@ -135,15 +168,6 @@ entities:
   - sensor.cmf_watch_pro_3_eingeschlafen
   - sensor.cmf_watch_pro_3_aufgewacht
 ```
-
-## Sicherheit
-
-- Gesundheitsdaten: Den Port nur im Heimnetz freigeben. Von unterwegs per VPN (z. B. WireGuard oder
-  Tailscale) oder hinter einem Reverse-Proxy mit HTTPS zugreifen.
-- Die App erlaubt unverschlüsseltes HTTP, damit `http://192.168.x.x:8080` im Heimnetz funktioniert.
-  Außerhalb des Heimnetzes nur HTTPS verwenden.
-- Der Container läuft als unprivilegierter Benutzer (UID 1000). Gemountete Ordner müssen für diese UID
-  beschreibbar sein.
 
 ## Entwicklung
 

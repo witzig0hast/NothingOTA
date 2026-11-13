@@ -1,8 +1,11 @@
 # cmfexport – alle Daten aus der Nothing CMF Watch Pro 3 holen
 
-> **Neu:** [`server/`](server/README.md) ist ein Docker-Backend, das die Daten automatisch an
-> **Home Assistant** weitergibt (MQTT Discovery, 29 Sensoren: Schlafphasen, Puls, SpO2, Stress, Schritte, Uhr-Akku, Trainings …).
-> Die App lädt dafür alle 15 Minuten (einstellbar) im Hintergrund hoch.
+> **Neu:** [`server/`](server/README.md) ist **CMF Health**, ein Docker-Container mit Website auf deiner Subdomain:
+> - **Website:** Anmeldung, Übersicht, Schlaf, Herz & Atmung, Trainings auf der Karte
+> - **Hinweise und KI:** Auffälligkeiten bei Atmung und Erholung, KI-Coach über deinen LiteLLM-Endpunkt
+> - **Home Assistant:** Weitergabe aller Werte per MQTT
+>
+> Die Apps verbinden sich mit einem Tipp und senden alle 15 Minuten.
 
 Die offizielle CMF-Watch-App hat **keinen Export-Knopf**. Es gibt aber drei Wege an die
 Rohdaten (Schlafphasen, Puls, SpO2, Stress, Schritte, Distanz, Kalorien, Workouts inkl. GPS).
@@ -22,7 +25,7 @@ aus Weg A und B in saubere CSV/JSON/GPX-Dateien plus einen HTML-Bericht umwandel
 
 ## Android-App (APK)
 
-Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.3.apk`](dist/CMF-Export-1.3.apk)**
+Alles oben gibt es auch als App direkt fürs Handy – kein PC nötig: **[`dist/CMF-Export-1.4.apk`](dist/CMF-Export-1.4.apk)**
 (Android 8+, ca. 3 MB). Daten verlassen das Handy nur, wenn du die ZIP teilst oder unter
 „Home Assistant“ deinen eigenen [cmfserver](server/README.md) einträgst.
 
@@ -52,12 +55,12 @@ Versionen sich über alte installieren lassen.
 
 ## CMF Track – Aktivitäten aufzeichnen (zweite App)
 
-**[`dist/CMF-Track-2.0.apk`](dist/CMF-Track-2.0.apk)** ist ein eigenständiger Aktivitäts-Tracker im Stil von
+**[`dist/CMF-Track-3.0.apk`](dist/CMF-Track-3.0.apk)** ist ein eigenständiger Aktivitäts-Tracker im Stil von
 Strava/Komoot: Die Strecke kommt per GPS vom Handy, der Puls von der Uhr.
 
-- **Karte (OpenStreetMap):** Ebenen Standard, Topo (Wandern), Rad (CyclOSM) und Satellit. Bei der Aufnahme
-  ist die Karte bildschirmfüllend und folgt deinem Standort; nach dem Training ist die Strecke nach Tempo
-  eingefärbt, mit km-Markierungen sowie Start und Ziel.
+- **Vektorkarte (OpenFreeMap/OpenStreetMap, gestochen scharf, hell und dunkel):** außerdem Ebenen Hell,
+  Topo (Wandern) und Satellit. Bei der Aufnahme ist die Karte bildschirmfüllend und folgt deinem Standort.
+  Nach dem Training ist die Strecke als Farbverlauf nach Tempo eingefärbt, mit km-Markierungen sowie Start und Ziel.
 - **Live-Werte:** Zeit, Distanz, Tempo, Ø-Tempo, Puls (mit Quelle), Höhenmeter, Schrittfrequenz oder kcal,
   km-Splits; Countdown 3-2-1, **Sprachansage** pro Kilometer, **Runden-Taste**, Pause/Runde auch in der
   Benachrichtigung
@@ -69,8 +72,13 @@ Strava/Komoot: Die Strecke kommt per GPS vom Handy, der Puls von der Uhr.
   Brustgurte (Bluetooth) funktionieren live.
 - **Uhr-Trainings übernehmen:** Trainings, die du nur auf der Uhr gestartet hast (mit GPS der Uhr), holt die
   App aus Health Connect und zeigt sie mit Karte, Puls und Splits an.
-- **Routen:** GPX importieren (z. B. aus Komoot), auf der Karte anzeigen, Restdistanz und Warnung per
-  Vibration und Sprache, wenn du von der Route abkommst; jedes eigene Training lässt sich als Route übernehmen.
+- **Routen planen wie bei Komoot:**
+  - **Planen:** Ziel suchen oder lange auf die Karte drücken; Rundtour mit Wunschdistanz oder „Hin & zurück“,
+    zu Fuß oder mit dem Rad.
+  - **Navigation:** Die Abbiege-Hinweise kommen als Banner, per Sprache und als Benachrichtigung, die die
+    **CMF-Uhr anzeigt**. In der CMF-App muss dafür unter Benachrichtigungen „CMF Track“ an sein.
+  - **Abweichung:** Kommst du von der Route ab, warnt die App und berechnet automatisch neu.
+  - **Weitere Quellen:** GPX importieren (z. B. aus Komoot), jedes eigene Training als Route übernehmen.
 - **Auswertung:** Bestleistungen (400 m bis Marathon) mit 🏆-Bestzeiten, km-Splits, Runden, Pulszonen,
   Tempo-, Höhen-, Puls- und Schrittfrequenz-Diagramm, Schrittlänge, Kalorien (Keytel-Formel)
 - **Statistik:** Wochenziel mit Fortschritt, km pro Woche (12 Wochen), Monat, Jahr, gesamt, Höhenmeter,

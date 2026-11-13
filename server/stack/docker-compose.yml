@@ -1,10 +1,35 @@
-# Fertiger Stack: MQTT-Broker (Mosquitto) + cmfserver.
-# 1. Diesen Ordner auf den Docker-Rechner kopieren
-# 2. API_TOKEN unten ändern (z.B.: openssl rand -hex 24)
-# 3. docker compose up -d
-# 4. In Home Assistant: Einstellungen → Geräte & Dienste → Integration hinzufügen → MQTT
-#    Broker = IP dieses Rechners, Port 1883, ohne Benutzer/Passwort
+# CMF Health: Website + API + Home-Assistant-Brücke (+ MQTT-Broker, + optional HTTPS mit Caddy)
+#
+# 1. PUBLIC_URL auf deine Subdomain setzen (z. B. https://health.example.de)
+# 2. Optional: KI-Endpunkt (LiteLLM) eintragen
+# 3. docker compose up -d                    (eigener Reverse-Proxy vorhanden)
+#    docker compose --profile https up -d    (Caddy holt automatisch ein HTTPS-Zertifikat)
+# 4. https://<deine-subdomain> öffnen, Konto anlegen (das erste Konto wird Admin)
 services:
+  cmfserver:
+    image: ghcr.io/witzig0hast/cmfserver:latest
+    container_name: cmfserver
+    restart: unless-stopped
+    ports:
+      - "8080:8080"                 # mit Caddy-Profil nicht nötig, schadet aber nicht im Heimnetz
+    environment:
+      TZ: Europe/Berlin
+      PUBLIC_URL: "https://health.example.de"   # deine Subdomain (für die Ein-Tipp-Verbindung der Apps)
+      SIGNUP: first                 # first = nur das erste Konto registriert sich selbst, open = jeder darf
+      COOKIE_SECURE: auto           # auto = Secure-Cookie, wenn der Proxy https meldet
+      # --- Home Assistant über MQTT (optional) ---
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      DEVICE_NAME: CMF Watch Pro 3
+      # --- KI-Analyse über LiteLLM / Ollama / OpenAI-kompatibel (optional) ---
+      # LLM_BASE_URL: http://litellm:4000      # ohne /v1 oder mit – beides geht
+      # LLM_MODEL: gpt-4o-mini                 # Modellname, wie er in LiteLLM heißt
+      # LLM_API_KEY: sk-...                    # LiteLLM master/virtual key
+    volumes:
+      - cmf-data:/data
+      - ./import:/import:ro         # optional: Gadgetbridge-Dateien (Unterordner = Benutzername)
+    depends_on: [mosquitto]
+
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
@@ -15,23 +40,21 @@ services:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
 
-  cmfserver:
-    image: ghcr.io/witzig0hast/cmfserver:latest
-    container_name: cmfserver
+  # HTTPS für die Subdomain (Ports 80/443 müssen auf diesen Rechner zeigen)
+  caddy:
+    image: caddy:2
+    container_name: caddy
     restart: unless-stopped
-    depends_on: [mosquitto]
+    profiles: [https]
     ports:
-      - "8080:8080"
-    environment:
-      TZ: Europe/Berlin
-      API_TOKEN: "HIER-EIN-EIGENES-LANGES-TOKEN"
-      MQTT_HOST: mosquitto        # Name des Containers oben – nicht ändern
-      MQTT_PORT: 1883
-      DEVICE_NAME: CMF Watch Pro 3
+      - "80:80"
+      - "443:443"
     volumes:
-      - cmf-data:/data
-      - ./import:/import:ro       # optional: Gadgetbridge-Dateien hier ablegen
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [cmfserver]
 
 volumes:
-  mosquitto-data:
   cmf-data:
+  mosquitto-data:
+  caddy-data:

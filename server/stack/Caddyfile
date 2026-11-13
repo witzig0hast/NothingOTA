@@ -1,0 +1,5 @@
+# Subdomain hier eintragen - Caddy holt das Let's-Encrypt-Zertifikat automatisch
+health.example.de {
+	encode zstd gzip
+	reverse_proxy cmfserver:8080
+}
