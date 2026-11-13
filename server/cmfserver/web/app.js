@@ -327,6 +327,9 @@
         h("p", { class: "small muted c12" }, ins.disclaimer)));
   }
 
+  /** Free vector map (OpenFreeMap, OpenStreetMap data) – light or dark like the rest of the site. */
+  const mapStyle = () => `https://tiles.openfreemap.org/styles/${matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "liberty"}`;
+
   const SPORT = { RUN: "Laufen", OUTDOOR_RUNNING: "Laufen", WALK: "Gehen", HIKE: "Wandern", RIDE: "Radfahren" };
   async function activityPage() {
     const [daily, workouts] = await Promise.all([api("/api/daily?days=60"), api("/api/workouts")]);
@@ -356,18 +359,20 @@
     const mapBox = h("div", { class: "map" });
     const pace = w.distance_km && w.duration_min ? w.duration_min / w.distance_km : null;
     requestAnimationFrame(() => {
-      if (!w.track.length || !window.L) { mapBox.replaceWith(h("div", { class: "empty" }, "Keine GPS-Strecke zu diesem Training")); return; }
-      const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-      const map = L.map(mapBox, { zoomControl: true, attributionControl: true });
-      L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/${dark ? "dark_all" : "voyager"}/{z}/{x}/{y}{r}.png`, {
-        maxZoom: 20, subdomains: "abcd", attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>',
-      }).addTo(map);
-      const pts = w.track.map((p) => [p[1], p[2]]);
-      L.polyline(pts, { color: "#ffffff", weight: 9, opacity: 0.9 }).addTo(map);
-      const line = L.polyline(pts, { color: css("--brand"), weight: 5 }).addTo(map);
-      L.circleMarker(pts[0], { radius: 8, color: "#fff", weight: 3, fillColor: "#2EBD59", fillOpacity: 1 }).addTo(map).bindTooltip("Start");
-      L.circleMarker(pts[pts.length - 1], { radius: 8, color: "#fff", weight: 3, fillColor: "#141414", fillOpacity: 1 }).addTo(map).bindTooltip("Ziel");
-      map.fitBounds(line.getBounds(), { padding: [24, 24] });
+      if (!w.track.length || !window.maplibregl) { mapBox.replaceWith(h("div", { class: "empty" }, "Keine GPS-Strecke zu diesem Training")); return; }
+      const coords = w.track.map((p) => [p[2], p[1]]);
+      const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+      const map = new maplibregl.Map({ container: mapBox, style: mapStyle(), bounds, fitBoundsOptions: { padding: 40 }, attributionControl: { compact: true } });
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      map.on("load", () => {
+        map.addSource("route", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } } });
+        map.addLayer({ id: "route-casing", type: "line", source: "route", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#ffffff", "line-width": 9 } });
+        map.addLayer({ id: "route", type: "line", source: "route", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": css("--brand"), "line-width": 5 } });
+        map.addSource("ends", { type: "geojson", data: { type: "FeatureCollection", features: [
+          { type: "Feature", properties: { c: "#2EBD59" }, geometry: { type: "Point", coordinates: coords[0] } },
+          { type: "Feature", properties: { c: "#141414" }, geometry: { type: "Point", coordinates: coords[coords.length - 1] } }] } });
+        map.addLayer({ id: "ends", type: "circle", source: "ends", paint: { "circle-radius": 7, "circle-color": ["get", "c"], "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+      });
     });
     return h("div", {},
       h("div", { class: "top" }, h("div", {}, h("a", { href: "#/aktivitaet", class: "small muted" }, "← Aktivität"),

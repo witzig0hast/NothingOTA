@@ -114,7 +114,7 @@ svg.chart text{fill:var(--muted);font-size:11px}
 .pill{display:inline-block;padding:3px 10px;border-radius:999px;background:var(--surface2);font-size:12px;font-weight:600;color:var(--muted)}
 .pill.red{background:var(--brand-soft);color:var(--brand)}
 .map{height:340px;border-radius:18px;overflow:hidden;background:var(--surface2)}
-.leaflet-container{font:inherit;background:var(--surface2)}
+.maplibregl-map{font:inherit}
 
 /* recovery ring */
 .ring{position:relative;width:132px;height:132px}

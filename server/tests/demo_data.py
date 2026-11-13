@@ -68,6 +68,9 @@ def demo_zip(days: int = 30, seed: int = 7, spo2_dips: bool = True) -> bytes:
         x = day_start
         hrs = []
         while x < min(day_start + timedelta(hours=15), now):
+            if k % 3 == 1 and 18 <= x.hour < 19:  # the evening run has its own heart rate below
+                x += timedelta(minutes=10)
+                continue
             v = resting + 18 + 10 * math.sin(x.hour / 3) + rnd.randint(-6, 8)
             hrs.append(v)
             hr.append(f"{_iso(x)},{v:.0f}")

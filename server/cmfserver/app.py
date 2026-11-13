@@ -28,8 +28,9 @@ WEB = Path(__file__).parent / "web"
 COOKIE = "cmf_session"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-       "img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; "
-       "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+       "img-src 'self' data: blob: https://tiles.openfreemap.org; "
+       "connect-src 'self' https://tiles.openfreemap.org; worker-src blob:; child-src blob:; "
+       "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
 
 class HttpError(Exception):
