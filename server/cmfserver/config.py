@@ -33,11 +33,14 @@ class Config:
     device_name: str = field(default_factory=lambda: _env("DEVICE_NAME", "CMF Watch Pro 3"))
     device_id: str = field(default_factory=lambda: _env("DEVICE_ID", "cmf_watch"))
     # MQTT (Home Assistant MQTT discovery)
+    mqtt_enabled: bool = field(default_factory=lambda: bool(_env("MQTT_HOST")) and _env("MQTT_ENABLED", "true").lower() in ("1", "true", "yes"))
     mqtt_host: str | None = field(default_factory=lambda: _env("MQTT_HOST"))
     mqtt_port: int = field(default_factory=lambda: int(_env("MQTT_PORT", "1883")))
     mqtt_user: str | None = field(default_factory=lambda: _env("MQTT_USER"))
     mqtt_password: str | None = field(default_factory=lambda: _secret("MQTT_PASSWORD"))
     mqtt_tls: bool = field(default_factory=lambda: _env("MQTT_TLS", "false").lower() in ("1", "true", "yes"))
+    mqtt_tls_insecure: bool = field(default_factory=lambda: _env("MQTT_TLS_INSECURE", "false").lower() in ("1", "true", "yes"))
+    mqtt_client_id: str | None = field(default_factory=lambda: _env("MQTT_CLIENT_ID"))
     discovery_prefix: str = field(default_factory=lambda: _env("MQTT_DISCOVERY_PREFIX", "homeassistant"))
     base_topic: str = field(default_factory=lambda: _env("MQTT_BASE_TOPIC", "cmfwatch"))
     # Home Assistant REST API (alternative to MQTT)
@@ -59,3 +62,49 @@ class Config:
     @property
     def db_path(self) -> Path:
         return self.data_dir / "cmfwatch.db"
+
+
+# Settings the admin can change in the website (Konto -> Server). Values saved there override the
+# environment variables above; the environment only provides the defaults.
+# key -> (type, secret)
+RUNTIME_SETTINGS: dict[str, tuple[type, bool]] = {
+    "mqtt_enabled": (bool, False), "mqtt_host": (str, False), "mqtt_port": (int, False),
+    "mqtt_user": (str, False), "mqtt_password": (str, True), "mqtt_tls": (bool, False),
+    "mqtt_tls_insecure": (bool, False), "mqtt_client_id": (str, False),
+    "discovery_prefix": (str, False), "base_topic": (str, False), "device_name": (str, False),
+    "ha_url": (str, False), "ha_token": (str, True),
+    "llm_base_url": (str, False), "llm_api_key": (str, True), "llm_model": (str, False),
+    "signup": (str, False), "public_url": (str, False), "publish_interval": (int, False),
+}
+
+
+def coerce(key: str, value):
+    """Validate one admin setting; raises ValueError with a German message."""
+    typ, _ = RUNTIME_SETTINGS[key]
+    if value is None or value == "":
+        if typ is bool:
+            return False
+        if typ is int:
+            raise ValueError(f"{key}: Zahl erwartet")
+        return None
+    if typ is bool:
+        return value if isinstance(value, bool) else str(value).lower() in ("1", "true", "yes", "on")
+    if typ is int:
+        v = int(value)
+        if key == "mqtt_port" and not 0 < v < 65536:
+            raise ValueError("MQTT-Port muss zwischen 1 und 65535 liegen")
+        if key == "publish_interval" and v < 30:
+            raise ValueError("Sende-Intervall: mindestens 30 Sekunden")
+        return v
+    v = str(value).strip()
+    if key == "signup" and v not in ("first", "open"):
+        raise ValueError("Registrierung: first oder open")
+    if key in ("ha_url", "llm_base_url", "public_url"):
+        if not v.startswith(("http://", "https://")):
+            raise ValueError(f"{key}: muss mit http:// oder https:// beginnen")
+        v = v.rstrip("/")
+    if key in ("discovery_prefix", "base_topic") and (not v or any(c in v for c in "#+ ")):
+        raise ValueError(f"{key}: keine Leerzeichen, # oder +")
+    if key == "mqtt_host" and ("/" in v or " " in v):
+        raise ValueError("MQTT-Host: nur Hostname oder IP, ohne mqtt:// und Pfad")
+    return v[:500]

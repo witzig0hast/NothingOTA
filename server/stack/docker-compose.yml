@@ -1,10 +1,12 @@
-# CMF Health: Website + API + Home-Assistant-Brücke (+ MQTT-Broker, + optional HTTPS mit Caddy)
+# CMF Health: Website + API + Home-Assistant-Brücke (+ optional HTTPS mit Caddy, + optional eigener MQTT-Broker)
 #
 # 1. PUBLIC_URL auf deine Subdomain setzen (z. B. https://health.example.de)
-# 2. Optional: KI-Endpunkt (LiteLLM) eintragen
-# 3. docker compose up -d                    (eigener Reverse-Proxy vorhanden)
+# 2. docker compose up -d                    (eigener Reverse-Proxy vorhanden)
 #    docker compose --profile https up -d    (Caddy holt automatisch ein HTTPS-Zertifikat)
-# 4. https://<deine-subdomain> öffnen, Konto anlegen (das erste Konto wird Admin)
+# 3. https://<deine-subdomain> öffnen, Konto anlegen (das erste Konto wird Admin)
+# 4. Als Admin unter „Server“ den MQTT-Broker von Home Assistant und den KI-Endpunkt (LiteLLM) eintragen.
+#    CMF Health ist dabei nur Client – dein vorhandener Broker (z. B. Mosquitto-Add-on) bleibt, wie er ist.
+#    Noch keinen Broker? `--profile broker` startet einen (Host in der Website dann: mosquitto).
 services:
   cmfserver:
     image: ghcr.io/witzig0hast/cmfserver:latest
@@ -17,23 +19,18 @@ services:
       PUBLIC_URL: "https://health.example.de"   # deine Subdomain (für die Ein-Tipp-Verbindung der Apps)
       SIGNUP: first                 # first = nur das erste Konto registriert sich selbst, open = jeder darf
       COOKIE_SECURE: auto           # auto = Secure-Cookie, wenn der Proxy https meldet
-      # --- Home Assistant über MQTT (optional) ---
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      DEVICE_NAME: CMF Watch Pro 3
-      # --- KI-Analyse über LiteLLM / Ollama / OpenAI-kompatibel (optional) ---
-      # LLM_BASE_URL: http://litellm:4000      # ohne /v1 oder mit – beides geht
-      # LLM_MODEL: gpt-4o-mini                 # Modellname, wie er in LiteLLM heißt
-      # LLM_API_KEY: sk-...                    # LiteLLM master/virtual key
+      # MQTT, Home Assistant und KI stellt der Admin auf der Website ein (Seite „Server“).
+      # Umgebungsvariablen wie MQTT_HOST / LLM_BASE_URL gehen weiterhin und gelten dann als Vorgabe.
     volumes:
       - cmf-data:/data
       - ./import:/import:ro         # optional: Gadgetbridge-Dateien (Unterordner = Benutzername)
-    depends_on: [mosquitto]
 
+  # Nur falls du noch keinen MQTT-Broker hast:  docker compose --profile broker up -d
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
     restart: unless-stopped
+    profiles: [broker]
     ports:
       - "1883:1883"
     volumes:

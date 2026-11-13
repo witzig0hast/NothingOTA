@@ -1,12 +1,19 @@
 # CMF Health – Website, KI-Analyse und Home Assistant für die CMF Watch
 
-`cmfserver` ist ein Docker-Container mit vier Teilen:
+`cmfserver` ist ein Docker-Container mit diesen Teilen:
 - **Website zum Anmelden** auf deiner eigenen Subdomain, mit Übersicht, Schlaf (Hypnogramm), Herz & Atmung,
-  Aktivität mit Karten, KI-Coach und Konto
+  Asthma-Tagebuch, Aktivität mit Karten, KI-Coach, druckbarem Arztbericht und Konto. Sie lässt sich wie eine
+  App auf den Startbildschirm legen (PWA).
+- **Asthma-Tagebuch:** Notfallspray-Hübe, Dauertherapie, Beschwerden, Peak-Flow (mit Zonen grün, gelb, rot) und
+  Auslöser. Daraus entsteht eine Einschätzung der Asthma-Kontrolle nach den GINA-Fragen.
+- **Luft & Pollen:** Pollenflug (Birke, Erle, Gräser, Beifuß, Ambrosia, Olive), Luftqualitätsindex und Wetter für
+  deinen Ort (Open-Meteo, kostenlos, ohne Key). Er erkennt auch, ob deine Beschwerden zu bestimmten Pollen passen.
+- **Ziele:** Schritte und Schlaf pro Konto
 - **Gesundheits-Hinweise:** Er erkennt Auffälligkeiten bei Atmung (nächtliche Sauerstoffabfälle,
   Atemfrequenz), Ruhepuls, HRV, Stress und Schlaf, immer im Vergleich mit deinen eigenen Werten
 - **KI-Analyse** über deinen LiteLLM-, Ollama- oder OpenAI-kompatiblen Endpunkt: Wochenbericht und „Frag deine Daten“
-- **Home Assistant:** Die Werte gehen per MQTT Discovery dorthin, ein Gerät pro Konto
+- **Home Assistant:** Die Werte gehen per MQTT Discovery dorthin, ein Gerät pro Konto. CMF Health verbindet
+  sich als **Client** mit deinem vorhandenen Broker. Den trägt der Admin auf der Website ein (Seite **Server**).
 
 Die Daten kommen aus den Apps **CMF Export** (Schlaf, Puls, SpO₂, Schritte … alle 15 min) und **CMF Track**
 (Trainings mit GPS und Puls). Jedes Konto hat ein eigenes kurzes App-Token (`cmf-xxxxxxxxxxxx`), das auf der
@@ -28,8 +35,7 @@ Gadgetbridge (optional) ─> /import ──────────────�
    ```
 3. **`docker-compose.yml` anpassen:**
    - `PUBLIC_URL: "https://health.example.de"`
-   - optional KI: `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` (dein LiteLLM-Endpunkt)
-   - optional Home Assistant: `MQTT_HOST` (der mitgelieferte Mosquitto ist vorkonfiguriert)
+   - MQTT und KI musst du hier nicht eintragen, das geht später auf der Website
 4. **Starten:**
    - **Ohne eigenen Reverse-Proxy:** In `Caddyfile` die Subdomain eintragen, dann
      `docker compose --profile https up -d`. Caddy holt das HTTPS-Zertifikat selbst; die Ports 80 und 443
@@ -38,23 +44,32 @@ Gadgetbridge (optional) ─> /import ──────────────�
      `http://<server>:8080` weiterleiten. Der Proxy muss `X-Forwarded-Proto: https` setzen (machen alle
      gängigen); dann bekommen die Login-Cookies automatisch das `Secure`-Flag.
 5. **Konto anlegen:** `https://health.example.de` öffnen und registrieren. Das **erste Konto wird Admin**,
-   danach ist die Registrierung geschlossen (`SIGNUP: open` öffnet sie). Weitere Konten legst du als Admin
-   unter **Konto → Benutzer** an.
+   danach ist die Registrierung geschlossen. Als Admin legst du unter **Server → Benutzer** weitere Konten an,
+   setzt Passwörter zurück oder öffnest die Registrierung.
 6. **Handy verbinden:** Die Website am Handy öffnen, **Konto → „CMF Export verbinden“** und
    **„CMF Track verbinden“** antippen. Adresse und Token werden automatisch eingetragen.
-7. **Home Assistant (optional):** *Einstellungen → Geräte & Dienste → MQTT* → Broker = IP des Servers, Port 1883.
+7. **Home Assistant:** Als Admin auf der Website **Server → MQTT-Broker** öffnen:
+   - Host: die IP von Home Assistant (beim Mosquitto-Add-on) oder deines Brokers, Port 1883
+   - Benutzer und Passwort: z. B. einen eigenen HA-Benutzer für MQTT
+   - **Verbindung testen**, dann **Speichern**
+
+   Die Verbindung wird sofort aufgebaut. Der Status zeigt an, ob sie steht. Kurz darauf erscheint in Home Assistant das Gerät
+   „CMF Watch Pro 3“. Ohne Broker geht auch die **Home-Assistant-API** (Adresse und Langzeit-Token). Hast du noch
+   gar keinen Broker, startet `docker compose --profile broker up -d` einen; als Host trägst du dann `mosquitto` ein.
+8. **Ort festlegen** (Konto → Ziele & Ort) für Pollen und Luftqualität.
 
 **Update:** `docker compose pull && docker compose up -d`. Eine Datenbank aus der Version 1.x wird automatisch
 dem ersten Konto zugeordnet.
 
 ### KI-Analyse (LiteLLM)
 
-Jeder OpenAI-kompatible Endpunkt geht, zum Beispiel:
-- **LiteLLM-Proxy:** `LLM_BASE_URL=http://litellm:4000`, `LLM_MODEL=<Modellname in LiteLLM>`, `LLM_API_KEY=<Key>`
-- **Ollama direkt:** `LLM_BASE_URL=http://ollama:11434/v1`, `LLM_MODEL=llama3.1:8b`, ohne Key
+Den Endpunkt trägt der Admin auf der Website unter **Server → KI** ein, mit **Testen**-Knopf. Jeder
+OpenAI-kompatible Endpunkt geht, zum Beispiel:
+- **LiteLLM-Proxy:** Endpunkt `http://litellm:4000`, Modell = Name in LiteLLM, API-Key = virtual/master key
+- **Ollama direkt:** Endpunkt `http://ollama:11434/v1`, Modell `llama3.1:8b`, ohne Key
 
 Gesendet wird nur eine kompakte Zusammenfassung: Tageswerte, Nächte, Sauerstoff- und Atemwerte pro Nacht,
-erkannte Hinweise und Trainings. Rohdaten wie einzelne Pulsmessungen gehen nicht raus. Das hält
+erkannte Hinweise, Trainings, das Asthma-Tagebuch (14 Tage) und die Pollenwerte von heute. Rohdaten wie einzelne Pulsmessungen gehen nicht raus. Das hält
 Anfragen klein, schnell und datensparsam. Ohne KI funktionieren alle regelbasierten Hinweise trotzdem.
 
 > **Hinweis:** Die Analysen beruhen auf Uhren-Sensoren und ersetzen keine ärztliche Untersuchung. Bei Atemnot,
@@ -93,6 +108,13 @@ diese Messungen einschalten:
 | Blutsauerstoff, Stress, Atemfrequenz, Gewicht | `sensor.cmf_watch_pro_3_blutsauerstoff` | %, –, /min, kg |
 | Akku Uhr (nur mit Gadgetbridge; Werte älter als 2 Tage werden nicht angezeigt) | `sensor.cmf_watch_pro_3_akku_uhr` | % |
 | Letztes Training (+ Distanz, Dauer, Ø Puls), Letzte Synchronisierung | `sensor.cmf_watch_pro_3_letztes_training` | km, min, bpm |
+| Schrittziel erreicht, Erholung | `sensor.cmf_watch_pro_3_schrittziel_erreicht` | % |
+| Gesundheitsstatus (`OK`, `Hinweis`, `Warnung`; offene Hinweise als Attribut) | `sensor.cmf_watch_pro_3_gesundheitsstatus` | – |
+| Notfallspray heute, Asthma-Kontrolle, Peak-Flow | `sensor.cmf_watch_pro_3_notfallspray_heute` | Hübe, –, L/min |
+| Luftqualität (EAQI), Pollenbelastung (`keine` … `hoch`, Werte pro Pollenart als Attribute) | `sensor.cmf_watch_pro_3_pollenbelastung` | – |
+
+Beispiel-Automation: Steht `Gesundheitsstatus` auf `Warnung` oder die Pollenbelastung auf `hoch`, kommt eine
+Push-Nachricht aufs Handy.
 
 Jeder Sensor hat Attribute, z. B. `measured_at` beim Puls oder alle Schlafphasen beim Schlafsensor.
 Home Assistant speichert den Verlauf selbst, so bekommst du Langzeit-Statistiken und Graphen.
@@ -112,14 +134,23 @@ Er liegt aber im Server und ist über `/api/history` abrufbar.
 Mehrfache Uploads sind kein Problem: Datensätze werden über ihren Zeitstempel zusammengeführt.
 Schritte, Distanz und Kalorien eines Tages werden nie kleiner.
 
-## Konfiguration (Umgebungsvariablen)
+## Konfiguration
+
+Fast alles stellst du als Admin auf der Website unter **Server** ein: MQTT-Broker (Host, Port, Benutzer, Passwort,
+TLS, Discovery-Präfix, Topic, Gerätename), Home-Assistant-API, KI-Endpunkt, Registrierung, öffentliche Adresse und
+das Sende-Intervall. Diese Werte liegen in der Datenbank und haben Vorrang vor den Umgebungsvariablen. Die
+Variablen unten sind nur Vorgaben, etwa für automatisierte Installationen. Passwörter und Keys
+zeigt die Website nie an, nur ob einer gespeichert ist.
+
+### Umgebungsvariablen
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
 | `API_TOKEN` | – | Nur für Installationen der Version 1.x: altes Token gilt weiter für das erste Konto |
 | `MQTT_HOST`, `MQTT_PORT` | –, `1883` | MQTT-Broker (aktiviert MQTT Discovery) |
 | `MQTT_USER`, `MQTT_PASSWORD` | – | MQTT-Anmeldung (auch `MQTT_PASSWORD_FILE`) |
-| `MQTT_TLS` | `false` | TLS zum Broker |
+| `MQTT_TLS`, `MQTT_TLS_INSECURE` | `false` | TLS zum Broker, Zertifikat nicht prüfen (selbstsigniert) |
+| `MQTT_ENABLED`, `MQTT_CLIENT_ID` | `true` (wenn Host gesetzt), `cmfserver-cmf_watch` | MQTT an/aus, Client-ID |
 | `MQTT_DISCOVERY_PREFIX` | `homeassistant` | Discovery-Präfix von Home Assistant |
 | `MQTT_BASE_TOPIC` | `cmfwatch` | Topics: `cmfwatch/<sensor>`, `cmfwatch/state` (alles als JSON) |
 | `HA_URL`, `HA_TOKEN` | – | Statt MQTT: Home-Assistant-REST-API mit langlebigem Zugriffstoken |
@@ -153,6 +184,12 @@ Website: Anmeldung per Cookie. Apps und Skripte: `Authorization: Bearer <App-Tok
 | `GET` | `/api/workouts`, `/api/workouts/<start_ts>` | Trainings, einzeln mit GPS-Strecke und Puls |
 | `GET` | `/api/insights` | regelbasierte Hinweise |
 | `POST` | `/api/ai/report`, `/api/ai/chat` | KI-Bericht / Frage stellen |
+| `GET`/`POST` | `/api/diary` | Asthma-Tagebuch lesen / eintragen: `{"kind":"reliever","value":2}` (`reliever`, `controller`, `symptom`, `peakflow`, `trigger`, `note`) oder `{"entries":[…]}` |
+| `DELETE` | `/api/diary/<id>` | Eintrag löschen |
+| `GET` | `/api/environment` | Pollen, Luftqualität und Wetter für den eigenen Ort |
+| `GET` | `/api/report?days=28` | Daten für den Arztbericht |
+| `GET`/`POST` | `/api/admin/settings` | Servereinstellungen (nur Admin, nur mit Login) |
+| `POST` | `/api/admin/mqtt/test`, `/api/admin/ai/test` | Verbindung testen (nur Admin) |
 | `GET` | `/api/export` | alle eigenen Daten als JSON |
 | `GET` | `/healthz` | Health-Check |
 

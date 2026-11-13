@@ -11,16 +11,11 @@ services:
       - "8080:8080"
     environment:
       TZ: Europe/Berlin
-      API_TOKEN: "bitte-ein-langes-zufaelliges-token"   # z.B.: openssl rand -hex 24
-      # --- Variante 1: MQTT (empfohlen, Sensoren erscheinen automatisch) ---
-      MQTT_HOST: 192.168.1.10          # IP von Home Assistant / Mosquitto
-      MQTT_PORT: 1883
-      MQTT_USER: mqtt-user
-      MQTT_PASSWORD: mqtt-passwort
-      # --- Variante 2: Home-Assistant-REST-API (ohne MQTT) ---
-      # HA_URL: http://192.168.1.10:8123
-      # HA_TOKEN: "langlebiges-zugriffstoken"
-      DEVICE_NAME: CMF Watch Pro 3
+      # MQTT-Broker, Home-Assistant-API und KI trägt der Admin (erstes Konto) auf der Website unter „Server“ ein.
+      # Optional als Vorgabe per Umgebung, z. B.:
+      # MQTT_HOST: 192.168.1.10
+      # MQTT_USER: mqtt-user
+      # MQTT_PASSWORD: mqtt-passwort
     volumes:
       - cmf-data:/data      # Datenbank (benanntes Volume, gehört automatisch dem Container-Benutzer)
       - ./import:/import:ro # hier abgelegte Dateien werden automatisch importiert (z.B. per Syncthing)

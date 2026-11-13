@@ -49,7 +49,7 @@ class LLM:
 
     def chat(self, messages: list[dict], max_tokens: int = 900) -> str:
         if not self.enabled:
-            raise LLMError("Kein KI-Endpunkt konfiguriert (LLM_BASE_URL und LLM_MODEL setzen).")
+            raise LLMError("Kein KI-Endpunkt eingerichtet – der Admin kann ihn auf der Website unter Server eintragen.")
         body = json.dumps({"model": self.cfg.llm_model, "messages": messages, "temperature": 0.3,
                            "max_tokens": max_tokens}).encode()
         headers = {"Content-Type": "application/json"}

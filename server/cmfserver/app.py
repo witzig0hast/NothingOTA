@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import mimetypes
+import os
 import re
 import signal
 import tempfile
@@ -16,11 +17,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
-from . import __version__, analysis
-from .config import Config
+import dataclasses
+
+from . import __version__, analysis, asthma, environment
+from .config import RUNTIME_SETTINGS, Config, coerce
 from .ingest import UnsupportedFile, ingest_file
 from .llm import LLM, LLMError
-from .publish import make_publishers
+from .publish import make_publishers, test_mqtt
 from .store import SESSION_DAYS, Store, now_ts
 
 log = logging.getLogger("cmfserver")
@@ -29,7 +32,7 @@ COOKIE = "cmf_session"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
        "img-src 'self' data: blob: https://tiles.openfreemap.org; "
-       "connect-src 'self' https://tiles.openfreemap.org; worker-src blob:; child-src blob:; "
+       "connect-src 'self' https://tiles.openfreemap.org; worker-src 'self' blob:; child-src blob:; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
 
@@ -40,20 +43,124 @@ class HttpError(Exception):
 
 
 class Service:
-    def __init__(self, cfg: Config, publishers=None):
-        self.cfg = cfg
+    def __init__(self, cfg: Config, publishers=None, env: environment.Environment | None = None):
+        self.base_cfg = cfg
         self.store = Store(cfg.db_path)
-        self.publishers = make_publishers(cfg) if publishers is None else publishers
-        self.llm = LLM(cfg)
+        self.fixed_publishers = publishers is not None
+        self.publishers = publishers or []
+        self.pub_lock = threading.Lock()
+        self.env = env or environment.Environment()
         self.stop = threading.Event()
         self.ingest_lock = threading.Lock()
         self.failed_logins: dict[str, list[float]] = {}
+        self.apply_settings()
+
+    # ------------------------------------------------------------------ admin settings
+    def apply_settings(self) -> None:
+        """Effective config = environment defaults + values the admin saved in the website."""
+        saved = {k: v for k, v in self.store.get_settings().items() if k in RUNTIME_SETTINGS}
+        self.cfg = dataclasses.replace(self.base_cfg, **saved)
+        self.llm = LLM(self.cfg)
+        if self.fixed_publishers:
+            return
+        with self.pub_lock:
+            old, self.publishers = self.publishers, []
+            for p in old:
+                try:
+                    p.close()
+                except Exception:  # noqa: BLE001
+                    log.exception("Schließen fehlgeschlagen")
+            try:
+                self.publishers = make_publishers(self.cfg)
+            except Exception:  # noqa: BLE001
+                log.exception("Home-Assistant-Verbindung konnte nicht aufgebaut werden")
+
+    def settings_view(self) -> dict:
+        saved = self.store.get_settings()
+        out = {}
+        for k, (typ, secret) in RUNTIME_SETTINGS.items():
+            v = getattr(self.cfg, k)
+            env = {"discovery_prefix": "MQTT_DISCOVERY_PREFIX", "base_topic": "MQTT_BASE_TOPIC"}.get(k, k.upper())
+            src = "ui" if k in saved else ("env" if os.environ.get(env) or os.environ.get(env + "_FILE") else "default")
+            out[k] = {"set": bool(v), "source": src} if secret else {"value": v, "source": src}
+        return out
+
+    def save_settings(self, body: dict) -> None:
+        for k, v in body.items():
+            if k not in RUNTIME_SETTINGS:
+                raise HttpError(400, f"Unbekannte Einstellung: {k}")
+            if RUNTIME_SETTINGS[k][1] and v is None:
+                continue  # secret not touched in the form -> keep
+            try:
+                self.store.set_setting(k, coerce(k, v))
+            except ValueError as e:
+                raise HttpError(400, str(e)) from e
+        self.apply_settings()
+        threading.Thread(target=self._publish_soon, daemon=True).start()
+
+    def _publish_soon(self) -> None:
+        for _ in range(20):  # give the new MQTT connection a moment
+            if self.stop.wait(0.5) or all(p.status().get("connected") for p in self.publishers if hasattr(p, "status")):
+                break
+        self.publish()
+
+    def connection_status(self) -> list[dict]:
+        return [p.status() for p in self.publishers if hasattr(p, "status")]
 
     def today(self):
         return datetime.now().astimezone().date()
 
-    def state(self, uid: int) -> dict:
-        return self.store.latest_state(uid, self.today())
+    # ------------------------------------------------------------------- per-user extras
+    def environment_for(self, u: dict | None) -> dict | None:
+        if not u or u.get("loc_lat") is None:
+            return None
+        env = self.env.get(u["loc_lat"], u["loc_lon"])
+        if env:
+            env = {**env, "place": u.get("loc_name")}
+        return env
+
+    def health(self, uid: int, with_env: bool = True) -> dict:
+        """Insights + asthma diary + environment in one go (used by dashboard, HA and the doctor report)."""
+        u = self.store.user(uid)
+        diary = asthma.summary(self.store, uid, self.today())
+        env = self.environment_for(u) if with_env else None
+        ins = analysis.insights(self.store, uid, self.today(), extra=asthma.flags(diary) + environment.flags(env, diary))
+        return {"user": u, "insights": ins, "asthma": diary, "environment": env}
+
+    def state(self, uid: int, with_env: bool = True) -> dict:
+        res = self.store.latest_state(uid, self.today())
+        s, a = res["state"], res["attributes"]
+        try:
+            h = self.health(uid, with_env)
+        except Exception:  # noqa: BLE001 - extras must never break the basic sensors
+            log.exception("Zusatzwerte fehlgeschlagen")
+            return res
+        u, ins, diary, env = h["user"], h["insights"], h["asthma"], h["environment"]
+        goal = (u or {}).get("goal_steps") or 10000
+        s["steps_goal"] = round(100 * s.get("steps_today", 0) / goal)
+        a["steps_goal"] = {"goal": goal}
+        if ins["recovery"] is not None:
+            s["recovery"] = ins["recovery"]
+        worst = ins["flags"][0]["level"] if ins["flags"] else "good"
+        s["health_status"] = {"alert": "Warnung", "warn": "Hinweis", "info": "OK", "good": "OK"}[worst]
+        a["health_status"] = {"level": worst, "hinweise": [f"{f['area']}: {f['title']}" for f in ins["flags"] if f["level"] in ("alert", "warn")]}
+        if diary["has_data"]:
+            s["inhaler_today"] = diary["today"]["reliever"]
+            a["inhaler_today"] = {"last_7_days": diary["reliever_7d"], "controller_today": diary["today"]["controller"]}
+            if diary["control"]:
+                s["asthma_control"] = diary["control"]
+                a["asthma_control"] = {q["q"]: q["yes"] for q in diary["questions"]}
+            if diary["peakflow"]:
+                s["peak_flow"] = diary["peakflow"]["value"]
+                a["peak_flow"] = diary["peakflow"]
+        if env:
+            if env.get("aqi") is not None:
+                s["air_quality"] = env["aqi"]
+                a["air_quality"] = {"label": env["aqi_label"], "pm2_5": env["pm2_5"], "pm10": env["pm10"],
+                                    "ozone": env["ozone"], "no2": env["no2"], "place": env.get("place")}
+            s["pollen"] = env["pollen_max"]
+            a["pollen"] = {p["name"]: p["today_max"] for p in env["pollen"]} | {"top": env["pollen_top"], "place": env.get("place")}
+        return res
 
     def publish(self, uid: int | None = None) -> None:
         users = [self.store.user(uid)] if uid else self.store.users()
@@ -61,7 +168,7 @@ class Service:
             if not u or not u.get("publish_ha", 1):
                 continue
             payload = self.state(u["id"])
-            for p in self.publishers:
+            for p in list(self.publishers):
                 try:
                     p.publish(payload, u)
                 except Exception:  # noqa: BLE001
@@ -132,12 +239,15 @@ class Service:
             self.stop.wait(self.cfg.watch_interval)
 
     def republish_loop(self) -> None:
-        while not self.stop.wait(self.cfg.publish_interval):
+        while not self.stop.wait(max(30, self.cfg.publish_interval)):
             self.publish()
 
 
 def make_handler(svc: Service):
-    cfg = svc.cfg
+    class _Cfg:  # always the current settings (the admin can change them at runtime)
+        def __getattr__(self, name):
+            return getattr(svc.cfg, name)
+    cfg = _Cfg()
     routes: list[tuple[str, re.Pattern, object, str]] = []  # method, path regex, function, auth: none|user|session
 
     def route(method: str, pattern: str, auth: str = "user"):
@@ -268,6 +378,10 @@ def make_handler(svc: Service):
                 self._send(500, {"error": f"Interner Fehler: {e.__class__.__name__}"})
 
         def static(self, path: str):
+            if path == "/sw.js":  # service worker must live at the root to control the whole site
+                self._send(200, (WEB / "sw.js").read_bytes(), "application/javascript",
+                           {"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+                return
             if path in ("", "/") or not path.startswith("/static/"):
                 f = WEB / "index.html"
             else:
@@ -277,6 +391,8 @@ def make_handler(svc: Service):
             ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
             if f.suffix == ".js":
                 ctype = "application/javascript"
+            elif f.suffix == ".webmanifest":
+                ctype = "application/manifest+json"
             self._send(200, f.read_bytes(), ctype, {"Cache-Control": "no-cache"})
 
     # =================================================================== routes
@@ -345,7 +461,10 @@ def make_handler(svc: Service):
         return {"id": u["id"], "username": u["username"], "is_admin": bool(u["is_admin"]), "token": u["token"],
                 "server": base, "publish_ha": bool(u.get("publish_ha", 1)),
                 "connect": {"export": f"cmfexport://connect?{q}", "track": f"cmftrack://connect?{q}"},
-                "ai": svc.llm.enabled, "mqtt": any(type(p).__name__ == "MqttPublisher" for p in svc.publishers)}
+                "ai": svc.llm.enabled, "mqtt": any(type(p).__name__ == "MqttPublisher" for p in svc.publishers),
+                "ha": bool(svc.publishers), "goal_steps": u.get("goal_steps") or 10000,
+                "goal_sleep_min": u.get("goal_sleep_min") or 450,
+                "location": {"lat": u["loc_lat"], "lon": u["loc_lon"], "name": u.get("loc_name")} if u.get("loc_lat") is not None else None}
 
     @route("GET", "/api/me")
     def me(h, user, m, qs):
@@ -372,6 +491,24 @@ def make_handler(svc: Service):
         b = h.body_json()
         if "publish_ha" in b:
             svc.store.set_publish_ha(user["id"], bool(b["publish_ha"]))
+        prof = {}
+        try:
+            if "goal_steps" in b:
+                prof["goal_steps"] = max(1000, min(50000, int(b["goal_steps"])))
+            if "goal_sleep_min" in b:
+                prof["goal_sleep_min"] = max(240, min(720, int(b["goal_sleep_min"])))
+            if "location" in b:
+                loc = b["location"]
+                if loc:
+                    lat, lon = float(loc["lat"]), float(loc["lon"])
+                    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                        raise ValueError
+                    prof.update(loc_lat=round(lat, 3), loc_lon=round(lon, 3), loc_name=str(loc.get("name") or "")[:80] or None)
+                else:
+                    prof.update(loc_lat=None, loc_lon=None, loc_name=None)
+        except (TypeError, ValueError, KeyError) as e:
+            raise HttpError(400, "Ungültiger Wert") from e
+        svc.store.set_profile(user["id"], **prof)
         h._send(200, me_dict(h, svc.store.user(user["id"])))
 
     @route("DELETE", "/api/me", auth="session")
@@ -392,6 +529,69 @@ def make_handler(svc: Service):
     def admin_users(h, user, m, qs):
         if not user["is_admin"]:
             raise HttpError(403, "Nur für Admins")
+        h._send(200, svc.store.users())
+
+    def admin_only(user):
+        if not user["is_admin"]:
+            raise HttpError(403, "Nur für Admins")
+
+    @route("GET", "/api/admin/settings", auth="session")
+    def admin_settings(h, user, m, qs):
+        admin_only(user)
+        h._send(200, {"settings": svc.settings_view(), "status": svc.connection_status(),
+                      "ai": svc.llm.enabled, "version": __version__})
+
+    @route("POST", "/api/admin/settings", auth="session")
+    def admin_settings_save(h, user, m, qs):
+        admin_only(user)
+        svc.save_settings(h.body_json())
+        log.info("Servereinstellungen geändert von %s", user["username"])
+        h._send(200, {"settings": svc.settings_view(), "status": svc.connection_status(), "ai": svc.llm.enabled})
+
+    @route("POST", "/api/admin/mqtt/test", auth="session")
+    def admin_mqtt_test(h, user, m, qs):
+        admin_only(user)
+        b = h.body_json()
+        over = {}
+        for k in ("mqtt_host", "mqtt_port", "mqtt_user", "mqtt_password", "mqtt_tls", "mqtt_tls_insecure", "mqtt_client_id"):
+            if k in b and b[k] is not None:
+                try:
+                    over[k] = coerce(k, b[k])
+                except ValueError as e:
+                    raise HttpError(400, str(e)) from e
+        h._send(200, test_mqtt(dataclasses.replace(svc.cfg, **over)))
+
+    @route("POST", "/api/admin/ai/test", auth="session")
+    def admin_ai_test(h, user, m, qs):
+        admin_only(user)
+        t0 = time.time()
+        try:
+            answer = svc.llm.chat([{"role": "user", "content": "Antworte nur mit: OK"}], max_tokens=10)
+            h._send(200, {"ok": True, "answer": answer[:80], "ms": round((time.time() - t0) * 1000)})
+        except LLMError as e:
+            h._send(200, {"ok": False, "error": str(e)})
+
+    @route("DELETE", r"/api/admin/users/(\d+)", auth="session")
+    def admin_delete(h, user, m, qs):
+        admin_only(user)
+        uid = int(m.group(1))
+        if uid == user["id"]:
+            raise HttpError(400, "Das eigene Konto bitte unter Konto löschen")
+        svc.store.delete_user(uid)
+        h._send(200, svc.store.users())
+
+    @route("POST", r"/api/admin/users/(\d+)", auth="session")
+    def admin_update(h, user, m, qs):
+        admin_only(user)
+        uid, b = int(m.group(1)), h.body_json()
+        if not svc.store.user(uid):
+            raise HttpError(404, "Konto nicht gefunden")
+        if "password" in b:
+            if len(b["password"] or "") < 8:
+                raise HttpError(400, "Passwort: mindestens 8 Zeichen")
+            svc.store.set_password(uid, b["password"])
+        if "is_admin" in b and uid != user["id"]:
+            svc.store.set_admin(uid, bool(b["is_admin"]))
         h._send(200, svc.store.users())
 
     @route("POST", "/api/admin/users", auth="session")
@@ -415,7 +615,8 @@ def make_handler(svc: Service):
     @route("GET", "/api/dashboard")
     def dashboard(h, user, m, qs):
         uid = user["id"]
-        ins = analysis.insights(svc.store, uid)
+        hl = svc.health(uid)
+        ins = hl["insights"]
         nights = svc.store.nights(uid, 30)
         last = next((n for n in reversed(nights) if n["type"] == "night"), None)
         report = svc.store.report(uid, svc.today().isoformat(), "daily") or svc.store.report(uid, (svc.today() - timedelta(days=1)).isoformat(), "daily")
@@ -425,6 +626,9 @@ def make_handler(svc: Service):
             "nights": nights, "daily": svc.store.daily(uid, 30),
             "heart_today": svc.store.series(uid, "heart_rate", now_ts() - 86400, max_points=300),
             "insights": ins, "report": report, "uploads": svc.store.uploads(uid, 5),
+            "asthma": {k: hl["asthma"][k] for k in ("today", "control", "peakflow", "reliever_7d", "has_data")},
+            "environment": hl["environment"],
+            "goals": {"steps": hl["user"].get("goal_steps") or 10000, "sleep_min": hl["user"].get("goal_sleep_min") or 450},
         })
 
     @route("GET", "/api/sleep")
@@ -462,7 +666,93 @@ def make_handler(svc: Service):
 
     @route("GET", "/api/insights")
     def insights(h, user, m, qs):
-        h._send(200, analysis.insights(svc.store, user["id"]))
+        h._send(200, svc.health(user["id"])["insights"])
+
+    # ---------------------------------------------------------------- asthma diary
+    @route("GET", "/api/diary")
+    def diary(h, user, m, qs):
+        h._send(200, asthma.summary(svc.store, user["id"], svc.today()))
+
+    @route("POST", "/api/diary")
+    def diary_add(h, user, m, qs):
+        b = h.body_json()
+        items = b.get("entries") if isinstance(b.get("entries"), list) else [b]
+        if not items or len(items) > 20:
+            raise HttpError(400, "Keine Einträge")
+        for e in items:
+            kind = e.get("kind")
+            value = e.get("value")
+            detail = e.get("detail")
+            try:
+                value = float(value) if value not in (None, "") else None
+            except (TypeError, ValueError) as ex:
+                raise HttpError(400, "Wert muss eine Zahl sein") from ex
+            if kind == "peakflow" and not (value and 50 <= value <= 900):
+                raise HttpError(400, "Peak-Flow: 50–900 l/min")
+            if kind in ("reliever", "controller") and value is not None and not 0 < value <= 20:
+                raise HttpError(400, "Hübe: 1–20")
+            if kind == "symptom" and value is not None and not 1 <= value <= 3:
+                raise HttpError(400, "Stärke: 1–3")
+            if isinstance(detail, list):
+                detail = ",".join(str(x) for x in detail)
+            ts = e.get("ts")
+            try:
+                ts = int(ts) if ts else None
+            except (TypeError, ValueError) as ex:
+                raise HttpError(400, "Zeitpunkt ungültig") from ex
+            if ts and not now_ts() - 400 * 86400 < ts < now_ts() + 3600:
+                raise HttpError(400, "Zeitpunkt ungültig")
+            try:
+                svc.store.add_diary(user["id"], kind, value, detail, ts)
+            except ValueError as ex:
+                raise HttpError(400, str(ex)) from ex
+        svc.publish(user["id"])
+        h._send(200, asthma.summary(svc.store, user["id"], svc.today()))
+
+    @route("DELETE", r"/api/diary/(\d+)")
+    def diary_delete(h, user, m, qs):
+        if not svc.store.delete_diary(user["id"], int(m.group(1))):
+            raise HttpError(404, "Eintrag nicht gefunden")
+        h._send(200, asthma.summary(svc.store, user["id"], svc.today()))
+
+    # ---------------------------------------------------------------- environment
+    @route("GET", "/api/environment")
+    def env(h, user, m, qs):
+        h._send(200, svc.environment_for(svc.store.user(user["id"])) or {"none": True})
+
+    @route("GET", "/api/geo", auth="session")
+    def geo(h, user, m, qs):
+        q = (qs.get("q", [""])[0] or "").strip()
+        if len(q) < 2:
+            h._send(200, [])
+            return
+        try:
+            h._send(200, svc.env.search(q[:80]))
+        except Exception as e:  # noqa: BLE001
+            raise HttpError(502, f"Ortssuche nicht erreichbar: {e}") from e
+
+    # ---------------------------------------------------------------- doctor report
+    @route("GET", "/api/report")
+    def doctor_report(h, user, m, qs):
+        uid = user["id"]
+        days = max(7, min(int(qs.get("days", ["28"])[0]), 180))
+        hl = svc.health(uid)
+        nights = [n for n in svc.store.nights(uid, days) if n["type"] == "night"]
+        daily = svc.store.daily(uid, days)
+        def avg(xs):
+            xs = [x for x in xs if x is not None]
+            return round(sum(xs) / len(xs), 1) if xs else None
+        h._send(200, {
+            "user": user["username"], "days": days, "created": datetime.now().astimezone().isoformat(timespec="minutes"),
+            "from": (svc.today() - timedelta(days=days - 1)).isoformat(), "to": svc.today().isoformat(),
+            "summary": {"sleep_h": avg([n["asleep_min"] / 60 for n in nights]), "nights": len(nights),
+                        "efficiency": avg([n.get("efficiency") for n in nights]),
+                        "awake_min": avg([n["awake_min"] for n in nights]),
+                        "steps": avg([d.get("steps") for d in daily]), "resting_hr": avg([d.get("resting_hr") for d in daily]),
+                        "spo2": avg([d.get("spo2_avg") for d in daily])},
+            "nights": nights, "daily": daily, "insights": hl["insights"], "asthma": hl["asthma"],
+            "workouts": [w for w in svc.store.workouts(uid, 100) if w["start"][:10] >= (svc.today() - timedelta(days=days)).isoformat()],
+        })
 
     @route("GET", "/api/uploads")
     def uploads(h, user, m, qs):
@@ -472,7 +762,7 @@ def make_handler(svc: Service):
     @route("POST", "/api/ai/report")
     def ai_report(h, user, m, qs):
         day = svc.today().isoformat()
-        content = svc.llm.report(analysis.ai_context(svc.store, user["id"]))
+        content = svc.llm.report(analysis.ai_context(svc.store, user["id"], svc.health(user["id"])))
         svc.store.save_report(user["id"], day, "daily", content)
         h._send(200, svc.store.report(user["id"], day, "daily"))
 
@@ -482,7 +772,7 @@ def make_handler(svc: Service):
         q = (b.get("message") or "").strip()
         if not q:
             raise HttpError(400, "Frage fehlt")
-        answer = svc.llm.ask(analysis.ai_context(svc.store, user["id"]), b.get("history") or [], q)
+        answer = svc.llm.ask(analysis.ai_context(svc.store, user["id"], svc.health(user["id"])), b.get("history") or [], q)
         h._send(200, {"answer": answer})
 
     # ---------------------------------------------------------------- upload & publish

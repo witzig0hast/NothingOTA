@@ -196,5 +196,5 @@ def test_ai_not_configured(tmp_path):
     a.call("/api/auth/register", {"username": "karim", "password": "sehrgeheim"})
     assert a.call("/api/me")[1]["ai"] is False
     code, err, _ = a.call("/api/ai/report", {})
-    assert code == 503 and "LLM_BASE_URL" in err["error"]
+    assert code == 503 and "Admin" in err["error"]
     httpd.shutdown()

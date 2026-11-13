@@ -60,7 +60,24 @@ CREATE TABLE IF NOT EXISTS report (
     PRIMARY KEY (user_id, day, kind)
 );
 CREATE INDEX IF NOT EXISTS sample_ts ON sample(user_id, metric, ts);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS diary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, ts INTEGER NOT NULL,
+    kind TEXT NOT NULL, value REAL, detail TEXT
+);
+CREATE INDEX IF NOT EXISTS diary_ts ON diary(user_id, ts);
 """
+
+# per-user preferences (added in 2.1)
+USER_EXTRA = {"goal_steps": "INTEGER DEFAULT 10000", "goal_sleep_min": "INTEGER DEFAULT 450",
+              "loc_lat": "REAL", "loc_lon": "REAL", "loc_name": "TEXT"}
+
+# asthma / breathing diary
+DIARY_KINDS = {"reliever", "controller", "symptom", "peakflow", "trigger", "note"}
+SYMPTOMS = {"husten": "Husten", "pfeifen": "Pfeifendes Atmen", "atemnot": "Atemnot", "enge": "Engegefühl in der Brust",
+            "nacht": "Nachts wach wegen Atmung", "eingeschraenkt": "Bei Aktivität eingeschränkt"}
+TRIGGERS = {"pollen": "Pollen", "sport": "Sport", "kaelte": "Kalte Luft", "infekt": "Infekt", "staub": "Staub/Milben",
+            "tiere": "Tiere", "stress": "Stress", "rauch": "Rauch/Abgase", "wetter": "Wetterumschwung"}
 
 WORKOUT_EXTRA = ["distance_km", "avg_hr", "max_hr", "elevation_gain_m", "calories"]
 
@@ -147,6 +164,10 @@ class Store:
         self.con.execute("PRAGMA journal_mode=WAL")
         self._migrate_single_user()
         self.con.executescript(SCHEMA)
+        have = {r[1] for r in self.con.execute("PRAGMA table_info(users)")}
+        for col, typ in USER_EXTRA.items():
+            if col not in have:
+                self.con.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
         self.con.commit()
 
     @property
@@ -224,13 +245,17 @@ class Store:
             self.con.execute("UPDATE users SET pw_hash=? WHERE id=?", (hash_password(pw), uid))
             self.con.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
 
+    def set_admin(self, uid: int, on: bool) -> None:
+        with self.lock, self.con:
+            self.con.execute("UPDATE users SET is_admin=? WHERE id=?", (1 if on else 0, uid))
+
     def set_publish_ha(self, uid: int, on: bool) -> None:
         with self.lock, self.con:
             self.con.execute("UPDATE users SET publish_ha=? WHERE id=?", (1 if on else 0, uid))
 
     def delete_user(self, uid: int) -> None:
         with self.lock, self.con:
-            for t in ("daily", "sleep", "stage", "sample", "workout", "track", "upload", "report", "sessions"):
+            for t in ("daily", "sleep", "stage", "sample", "workout", "track", "upload", "report", "sessions", "diary"):
                 self.con.execute(f"DELETE FROM {t} WHERE user_id=?", (uid,))
             self.con.execute("DELETE FROM users WHERE id=?", (uid,))
 
@@ -527,9 +552,44 @@ class Store:
         r = self.con.execute("SELECT * FROM report WHERE user_id=? AND day=? AND kind=?", (uid, day, kind)).fetchone()
         return dict(r) if r else None
 
+    # ------------------------------------------------------------------------- settings
+    def get_settings(self) -> dict:
+        import json as _j
+        return {r["key"]: _j.loads(r["value"]) for r in self.con.execute("SELECT * FROM settings")}
+
+    def set_setting(self, key: str, value) -> None:
+        import json as _j
+        with self.lock, self.con:
+            self.con.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, _j.dumps(value)))
+
+    # ---------------------------------------------------------------------- user profile
+    def set_profile(self, uid: int, **kw) -> None:
+        allowed = {k: v for k, v in kw.items() if k in USER_EXTRA}
+        if not allowed:
+            return
+        with self.lock, self.con:
+            self.con.execute(f"UPDATE users SET {', '.join(f'{k}=?' for k in allowed)} WHERE id=?", (*allowed.values(), uid))
+
+    # ---------------------------------------------------------------------------- diary
+    def add_diary(self, uid: int, kind: str, value: float | None = None, detail: str | None = None, ts: int | None = None) -> int:
+        if kind not in DIARY_KINDS:
+            raise ValueError(f"unbekannte Art: {kind}")
+        with self.lock, self.con:
+            cur = self.con.execute("INSERT INTO diary (user_id, ts, kind, value, detail) VALUES (?,?,?,?,?)",
+                                   (uid, ts or now_ts(), kind, value, (detail or "")[:500] or None))
+        return cur.lastrowid
+
+    def diary(self, uid: int, days: int = 30) -> list[dict]:
+        return [dict(r) for r in self.con.execute(
+            "SELECT id, ts, kind, value, detail FROM diary WHERE user_id=? AND ts >= ? ORDER BY ts", (uid, now_ts() - days * 86400))]
+
+    def delete_diary(self, uid: int, entry_id: int) -> bool:
+        with self.lock, self.con:
+            return self.con.execute("DELETE FROM diary WHERE user_id=? AND id=?", (uid, entry_id)).rowcount > 0
+
     def export_all(self, uid: int) -> dict:
         """Everything stored for one user (DSGVO export)."""
         out = {}
-        for t in ("daily", "sleep", "stage", "sample", "workout", "track", "upload", "report"):
+        for t in ("daily", "sleep", "stage", "sample", "workout", "track", "upload", "report", "diary"):
             out[t] = [{k: r[k] for k in r.keys() if k != "user_id"} for r in self.con.execute(f"SELECT * FROM {t} WHERE user_id=?", (uid,))]
         return out

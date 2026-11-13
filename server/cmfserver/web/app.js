@@ -56,18 +56,23 @@
     heart: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
     run: "M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7",
     ai: "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z",
+    lungs: "M6.5 6C5 6 4 10 3 14s-1 7 1 7 5.5-1 5.5-4v-4.4L11 11.1V2h2v9.1l1.5 1.5V17c0 3 3.5 4 5.5 4s2-3 1-7-2-8-3.5-8S15 8 15 10v1.5l-2-2h-2l-2 2V10c0-2-1-4-2.5-4z",
+    gear: "M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.47.47 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z",
+    doc: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm2 16H8v-2h8zm0-4H8v-2h8zm-3-5V3.5L18.5 9z",
     user: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
   };
   const icon = (name) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", ICONS[name]); p.setAttribute("fill", "currentColor"); s.append(p); return s; };
-  const NAV = [["", "Übersicht", "home"], ["schlaf", "Schlaf", "sleep"], ["herz", "Herz & Atmung", "heart"], ["aktivitaet", "Aktivität", "run"], ["coach", "KI-Coach", "ai"], ["konto", "Konto", "user"]];
+  const NAV = [["", "Übersicht", "home"], ["schlaf", "Schlaf", "sleep"], ["herz", "Herz & Atmung", "heart"], ["tagebuch", "Asthma-Tagebuch", "lungs"],
+    ["aktivitaet", "Aktivität", "run"], ["coach", "KI-Coach", "ai"], ["bericht", "Arztbericht", "doc"], ["konto", "Konto", "user"], ["server", "Server", "gear"]];
+  const TABS = ["", "schlaf", "herz", "tagebuch", "aktivitaet", "konto"];
 
   // ------------------------------------------------------------------ shell & router
   function shell(content, active) {
     const side = h("aside", { class: "side" },
       h("div", { class: "brand" }, h("img", { src: "/static/icon.svg", alt: "" }), "CMF Health"),
-      h("nav", { class: "nav" }, NAV.map(([p, label, ic]) => h("a", { href: "#/" + p, class: p === active ? "active" : "" }, icon(ic), label))),
+      h("nav", { class: "nav" }, NAV.filter((n) => n[0] !== "server" || me.is_admin).map(([p, label, ic]) => h("a", { href: "#/" + p, class: p === active ? "active" : "" }, icon(ic), label))),
       h("div", { class: "who" }, "Angemeldet als ", h("b", {}, me.username)));
-    const tabbar = h("nav", { class: "tabbar" }, NAV.filter((n) => n[0] !== "konto" || true).map(([p, label, ic]) =>
+    const tabbar = h("nav", { class: "tabbar" }, NAV.filter((n) => TABS.includes(n[0])).map(([p, label, ic]) =>
       h("a", { href: "#/" + p, class: p === active ? "active" : "" }, icon(ic), label.split(" ")[0])));
     const app = document.getElementById("app");
     app.textContent = "";
@@ -76,13 +81,16 @@
 
   async function route() {
     C.hideTip();
+    if (!location.hash && location.pathname.length > 1) history.replaceState(null, "", "/#" + location.pathname);
     const path = location.hash.replace(/^#\/?/, "");
     if (!me) {
       try { me = await api("/api/me"); } catch { me = null; }
       if (!me) return authPage();
     }
     const [page, arg] = path.split("/");
-    const pages = { "": overview, schlaf: sleepPage, herz: heartPage, aktivitaet: activityPage, training: workoutPage, coach: coachPage, konto: accountPage };
+    const pages = { "": overview, schlaf: sleepPage, herz: heartPage, aktivitaet: activityPage, training: workoutPage, coach: coachPage, konto: accountPage,
+      tagebuch: diaryPage, bericht: reportPage, server: serverPage };
+    document.body.classList.toggle("print-page", page === "bericht");
     const fn = pages[page] || overview;
     const main = h("div", {}, h("div", { class: "loading" }, "Lädt …"));
     shell(main, page === "training" ? "aktivitaet" : page);
@@ -217,7 +225,7 @@
     if (d.report) aiCard.append(h("div", { class: "md small", html: markdown(d.report.content.split("\n").slice(0, 14).join("\n")) }));
     else if (me.ai) aiCard.append(h("p", { class: "muted small" }, "Lass dir einen Bericht über Schlaf, Atmung, Herz und Training schreiben."),
       h("button", { class: "btn", onclick: async (e) => { e.target.disabled = true; e.target.textContent = "Schreibt …"; try { await api("/api/ai/report", { json: {} }); route(); } catch (ex) { toast(ex.message); e.target.disabled = false; } } }, "Bericht erstellen"));
-    else aiCard.append(h("p", { class: "muted small" }, "KI ist noch nicht eingerichtet (LLM_BASE_URL/LLM_MODEL am Server setzen). Die Hinweise links funktionieren auch ohne KI."));
+    else aiCard.append(h("p", { class: "muted small" }, me.is_admin ? "KI ist noch nicht eingerichtet – unter „Server“ den LiteLLM-Endpunkt eintragen. Die Hinweise funktionieren auch ohne KI." : "KI ist noch nicht eingerichtet (der Admin kann sie unter „Server“ einschalten). Die Hinweise funktionieren auch ohne KI."));
 
     return h("div", {},
       h("div", { class: "top" }, h("div", {}, h("h1", {}, `Hallo ${me.username}`),
@@ -227,11 +235,13 @@
           h("div", {}, h("div", { class: "label" }, "Erholung"), h("div", { style: `font-weight:600;color:${css(rcolor)}` }, rtext),
             h("div", { class: "small muted" }, "aus Schlaf, Ruhepuls, HRV und Sauerstoff"))),
         nightCard,
-        tile("Schritte heute", s.steps_today != null ? nf.format(s.steps_today) : null, "", s.steps_yesterday != null ? `gestern ${nf.format(s.steps_yesterday)}` : ""),
+        tile("Schritte heute", s.steps_today != null ? nf.format(s.steps_today) : null, "", progress(s.steps_today || 0, d.goals.steps, `Ziel ${nf.format(d.goals.steps)}`)),
         tile("Puls", s.heart_rate, "bpm", s.resting_heart_rate ? `Ruhepuls ${Math.round(s.resting_heart_rate)} bpm` : "", css("--brand")),
         tile("Sauerstoff (SpO₂)", s.spo2 != null ? fmt1(s.spo2) : null, "%", spo2Night ? `Nacht: Ø ${fmt1(spo2Night.avg)} %, min ${spo2Night.min} %` : ""),
         tile(s.respiratory_rate != null ? "Atemfrequenz" : "Stress", s.respiratory_rate != null ? fmt1(s.respiratory_rate) : s.stress, s.respiratory_rate != null ? "/min" : "",
           s.respiratory_rate != null && s.stress != null ? `Stress ${s.stress}` : s.watch_battery != null ? `Uhr-Akku ${s.watch_battery} %` : ""),
+        envCard(d.environment, "c6"),
+        quickLogCard(d.asthma, "c6"),
         h("div", { class: "card c7 stack" }, h("h2", {}, "Hinweise"), flagList(ins.flags), h("p", { class: "small muted", style: "margin:4px 0 0" }, ins.disclaimer)),
         aiCard,
         h("div", { class: "card c6" }, h("h2", {}, "Puls · letzte 24 h"),
@@ -240,9 +250,9 @@
           chartBox(170, (b) => C.stacked(b, lastNights.map((x) => ({
             label: dayLabel(x.night_of), tip: `${dayLabel(x.night_of)}: ${hm(x.asleep_min)}`,
             parts: [{ v: x.deep_min, color: css("--deep") }, { v: x.light_min, color: css("--light") }, { v: x.rem_min, color: css("--rem") }],
-          })), { height: 170, goal: 420 }))),
+          })), { height: 170, goal: d.goals.sleep_min }))),
         h("div", { class: "card c12" }, h("h2", {}, "Schritte · 30 Tage"),
-          chartBox(150, (b) => C.bars(b, daily.map((x) => ({ label: dayLabel(x.date), value: x.steps, tip: `${dayLabel(x.date)}: ${x.steps != null ? nf.format(x.steps) : "–"} Schritte`, color: css("--good") })), { height: 150, goal: 10000 }))),
+          chartBox(150, (b) => C.bars(b, daily.map((x) => ({ label: dayLabel(x.date), value: x.steps, tip: `${dayLabel(x.date)}: ${x.steps != null ? nf.format(x.steps) : "–"} Schritte`, color: x.steps >= d.goals.steps ? css("--good") : css("--light") })), { height: 150, goal: d.goals.steps }))),
         naps.length ? h("div", { class: "card c12 small" }, `Nickerchen heute: ${hm(naps.reduce((a, x) => a + x.asleep_min, 0))} – zählt nicht zum Nachtschlaf.`) : null,
       ));
   }
@@ -416,9 +426,9 @@
       } catch (ex) { wait.textContent = ex.message; }
       chat.scrollTop = chat.scrollHeight;
     };
-    const chips = ["Wie war meine Atmung nachts?", "Bin ich heute erholt genug für ein Training?", "Was kann ich für besseren Schlaf tun?"];
+    const chips = ["Wie war meine Atmung nachts?", "Was löst mein Asthma aus?", "Bin ich heute erholt genug für ein Training?", "Was kann ich für besseren Schlaf tun?"];
     return h("div", {},
-      h("div", { class: "top" }, h("div", {}, h("h1", {}, "KI-Coach"), h("div", { class: "sub" }, me.ai ? "Analysiert deine zusammengefassten Daten über deinen KI-Endpunkt" : "Am Server LLM_BASE_URL und LLM_MODEL setzen, um die KI zu aktivieren"))),
+      h("div", { class: "top" }, h("div", {}, h("h1", {}, "KI-Coach"), h("div", { class: "sub" }, me.ai ? "Analysiert deine zusammengefassten Daten (inkl. Asthma-Tagebuch und Pollen) über deinen KI-Endpunkt" : "Die KI ist noch nicht eingerichtet – der Admin trägt den Endpunkt unter „Server“ ein"))),
       h("div", { class: "grid" },
         h("div", { class: "card c7 stack" }, h("div", { class: "row between" }, h("h2", { style: "margin:0" }, `Bericht · ${new Date(day).toLocaleDateString("de-DE")}`), genBtn), reportBox,
           h("p", { class: "small muted" }, dash.insights.disclaimer)),
@@ -435,17 +445,9 @@
     const fileInput = h("input", { type: "file" });
     const uploadMsg = h("div", { class: "small muted" });
     const card = (title, ...body) => h("div", { class: "card c6 stack" }, h("h2", {}, title), ...body);
-    const usersBox = h("div");
-    let adminCard = null;
-    if (me.is_admin) {
-      const renderUsers = (list) => { usersBox.textContent = ""; usersBox.append(h("div", { class: "list small" }, list.map((u) => h("div", { class: "row between" }, h("span", {}, u.username), u.is_admin ? h("span", { class: "pill" }, "Admin") : "")))); };
-      api("/api/admin/users").then(renderUsers);
-      const nu = h("input", { type: "text", placeholder: "Benutzername" }), np = h("input", { type: "password", placeholder: "Passwort (min. 8)" });
-      adminCard = card("Benutzer (Admin)", usersBox, h("form", { class: "stack", onsubmit: async (e) => {
-        e.preventDefault();
-        try { renderUsers(await api("/api/admin/users", { json: { username: nu.value, password: np.value } })); nu.value = np.value = ""; toast("Konto angelegt"); } catch (ex) { toast(ex.message); }
-      } }, nu, np, h("button", { class: "btn tonal" }, "Konto anlegen")));
-    }
+    const adminCard = me.is_admin ? card("Server & Benutzer",
+      h("p", { class: "small muted", style: "margin:0" }, "Als Admin richtest du MQTT/Home Assistant, die KI und die Registrierung ein und verwaltest Konten."),
+      h("a", { class: "btn tonal", href: "#/server" }, "Servereinstellungen öffnen")) : null;
     const oldPw = h("input", { type: "password", placeholder: "Aktuelles Passwort", autocomplete: "current-password" });
     const newPw = h("input", { type: "password", placeholder: "Neues Passwort (min. 8)", autocomplete: "new-password" });
     return h("div", {},
@@ -476,8 +478,9 @@
               uploadMsg.textContent = "Importiert: " + Object.entries(r.counts).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(", ");
             } catch (e) { uploadMsg.textContent = e.message; }
           } }, "Hochladen")),
+        profileCard(card),
         card("Home Assistant",
-          h("label", { class: "switch" }, h("span", {}, "Meine Werte an Home Assistant senden", h("div", { class: "small muted" }, me.mqtt ? "über MQTT – Gerät „CMF Watch“" : "MQTT ist am Server nicht eingerichtet")),
+          h("label", { class: "switch" }, h("span", {}, "Meine Werte an Home Assistant senden", h("div", { class: "small muted" }, me.mqtt ? "über MQTT – Gerät „CMF Watch“" : me.ha ? "über die Home-Assistant-API" : me.is_admin ? "Noch keine Verbindung – unter „Server“ den MQTT-Broker eintragen" : "Der Admin hat noch keine Verbindung eingerichtet")),
             h("input", { type: "checkbox", checked: me.publish_ha, onchange: async (e) => { me = await api("/api/me/settings", { json: { publish_ha: e.target.checked } }); toast("Gespeichert"); } }))),
         card("Passwort ändern", h("form", { class: "stack", onsubmit: async (e) => {
           e.preventDefault();
@@ -490,8 +493,354 @@
             if (!pw) return;
             try { await api("/api/me", { method: "DELETE", json: { password: pw } }); me = null; location.hash = ""; route(); } catch (e) { toast(e.message); }
           } }, "Konto löschen")),
-        me.is_admin ? adminCard : null));
+        adminCard,
+        card("App installieren",
+          h("p", { class: "small muted", style: "margin:0" }, "Die Website lässt sich wie eine App auf den Startbildschirm legen (Chrome: Menü → „App installieren“, iPhone: Teilen → „Zum Home-Bildschirm“)."),
+          installBtn())));
   }
+
+  // ------------------------------------------------------------------ shared new blocks
+  function progress(value, goal, label) {
+    const pct = Math.min(100, Math.round((100 * value) / (goal || 1)));
+    return h("div", {}, h("div", { class: "pbar" }, h("span", { style: `width:${pct}%;background:${css(pct >= 100 ? "--good" : "--light")}` })),
+      h("div", { class: "small muted", style: "margin-top:4px" }, `${label} · ${pct} %`));
+  }
+  const POLLEN_COLORS = ["--surface2", "--good", "--warn", "--brand"];
+  const LEVEL_NAMES = ["keine", "gering", "mittel", "hoch"];
+  function envCard(env, cls) {
+    const c = h("div", { class: `card ${cls} stack` }, h("div", { class: "row between" }, h("h2", { style: "margin:0" }, "Luft & Pollen"),
+      env && env.place ? h("span", { class: "small muted" }, env.place) : null));
+    if (!env) {
+      c.append(h("p", { class: "small muted", style: "margin:0" }, "Trag unter Konto deinen Ort ein – dann siehst du hier Pollenflug, Luftqualität und Wetter, und die Hinweise berücksichtigen sie."),
+        h("a", { class: "btn tonal small", href: "#/konto" }, "Ort festlegen"));
+      return c;
+    }
+    const aqiColor = env.aqi == null ? "--muted" : env.aqi <= 40 ? "--good" : env.aqi <= 60 ? "--warn" : "--brand";
+    c.append(h("div", { class: "row", style: "gap:22px" },
+      h("div", {}, h("div", { class: "label" }, "Luftqualität"), h("div", { class: "num", style: `color:${css(aqiColor)}` }, env.aqi != null ? Math.round(env.aqi) : "–"),
+        h("div", { class: "small muted" }, env.aqi_label || "")),
+      h("div", {}, h("div", { class: "label" }, "Pollen"), h("div", { class: "num" }, env.pollen_max), h("div", { class: "small muted" }, env.pollen_top || "kaum Flug")),
+      env.weather ? h("div", {}, h("div", { class: "label" }, "Wetter"), h("div", { class: "num" }, env.weather.temp != null ? Math.round(env.weather.temp) : "–", h("span", { class: "unit" }, "°C")),
+        h("div", { class: "small muted" }, [env.weather.text, env.weather.humidity != null ? `${env.weather.humidity} % Feuchte` : null].filter(Boolean).join(" · "))) : null));
+    const shown = env.pollen.filter((p) => p.level || p.level_tomorrow);
+    c.append(shown.length ? h("div", { class: "pollen" }, shown.map((p) => h("div", { class: "row between small" },
+      h("span", {}, p.name),
+      h("span", { class: "row", style: "gap:6px" },
+        h("span", { class: "lvl", title: "heute", style: `background:${css(POLLEN_COLORS[p.level])}` }, LEVEL_NAMES[p.level]),
+        h("span", { class: "muted" }, "morgen"),
+        h("span", { class: "lvl", style: `background:${css(POLLEN_COLORS[p.level_tomorrow])}` }, LEVEL_NAMES[p.level_tomorrow])))))
+      : h("div", { class: "small muted" }, "Heute und morgen kein nennenswerter Pollenflug."),
+      h("div", { class: "small muted" }, `Feinstaub PM2,5 ${fmt1(env.pm2_5)} µg/m³ · Ozon ${fmt1(env.ozone)} µg/m³ · Quelle: Open-Meteo/CAMS`));
+    return c;
+  }
+
+  async function logDiary(entries) {
+    const r = await api("/api/diary", { json: { entries } });
+    toast("Eingetragen");
+    return r;
+  }
+  function quickLogCard(a, cls) {
+    const pf = h("input", { type: "number", min: 50, max: 900, placeholder: "l/min", style: "max-width:120px" });
+    const info = h("div", { class: "small muted" });
+    const show = (x) => { info.textContent = `Heute ${x.today.reliever} Hübe Notfallspray · 7 Tage: ${x.reliever_7d}` + (x.control ? ` · Asthma ${x.control}` : ""); };
+    show(a);
+    return h("div", { class: `card ${cls} stack` }, h("div", { class: "row between" }, h("h2", { style: "margin:0" }, "Asthma-Tagebuch"), h("a", { href: "#/tagebuch", class: "small muted" }, "Alles →")),
+      info,
+      h("div", { class: "row" },
+        h("button", { class: "btn", onclick: async () => show(await logDiary([{ kind: "reliever", value: 1 }])) }, "+1 Hub Notfallspray"),
+        h("button", { class: "btn tonal", onclick: async () => show(await logDiary([{ kind: "controller", value: 1 }])) }, "Dauertherapie genommen")),
+      h("form", { class: "row", style: "flex-wrap:nowrap", onsubmit: async (e) => { e.preventDefault(); if (!pf.value) return; try { show(await logDiary([{ kind: "peakflow", value: +pf.value }])); pf.value = ""; } catch (ex) { toast(ex.message); } } },
+        h("span", { class: "small muted", style: "white-space:nowrap" }, "Peak-Flow"), pf, h("button", { class: "btn tonal small" }, "Speichern")),
+      a.peakflow ? h("div", { class: "small" }, "Letzter Peak-Flow ", h("b", {}, `${Math.round(a.peakflow.value)} l/min`), ` · ${a.peakflow.pct} % vom Bestwert · Zone `,
+        h("span", { class: "lvl", style: `background:${css({ grün: "--good", gelb: "--warn", rot: "--brand" }[a.peakflow.zone])}` }, a.peakflow.zone)) : null);
+  }
+
+  // ------------------------------------------------------------------ asthma diary page
+  async function diaryPage() {
+    const a = await api("/api/diary");
+    const sym = new Set(), trig = new Set();
+    let severity = 2, puffs = 0;
+    const chip = (key, label, set) => h("button", { type: "button", class: "chip", onclick: (e) => {
+      set.has(key) ? set.delete(key) : set.add(key); e.currentTarget.classList.toggle("on");
+    } }, label);
+    const puffLabel = h("b", {}, "0");
+    const pf = h("input", { type: "number", min: 50, max: 900, placeholder: "z. B. 450" });
+    const note = h("input", { type: "text", maxlength: 500, placeholder: "Notiz (optional)" });
+    const when = h("input", { type: "datetime-local", value: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) });
+    const controller = h("input", { type: "checkbox" });
+    const save = async (e) => {
+      e.preventDefault();
+      const ts = Math.round(new Date(when.value).getTime() / 1000) || undefined;
+      const entries = [];
+      if (puffs) entries.push({ kind: "reliever", value: puffs, ts });
+      if (controller.checked) entries.push({ kind: "controller", value: 1, ts });
+      if (sym.size) entries.push({ kind: "symptom", detail: [...sym], value: severity, ts });
+      if (trig.size) entries.push({ kind: "trigger", detail: [...trig], ts });
+      if (pf.value) entries.push({ kind: "peakflow", value: +pf.value, ts });
+      if (note.value.trim()) entries.push({ kind: "note", detail: note.value.trim(), ts });
+      if (!entries.length) return toast("Nichts ausgewählt");
+      try { await logDiary(entries); route(); } catch (ex) { toast(ex.message); }
+    };
+    const form = h("form", { class: "card c7 stack", onsubmit: save },
+      h("h2", {}, "Eintragen"),
+      h("div", { class: "label" }, "Notfallspray (Hübe)"),
+      h("div", { class: "row" },
+        h("button", { type: "button", class: "btn tonal small", onclick: () => { puffs = Math.max(0, puffs - 1); puffLabel.textContent = puffs; } }, "−"),
+        puffLabel,
+        h("button", { type: "button", class: "btn tonal small", onclick: () => { puffs = Math.min(20, puffs + 1); puffLabel.textContent = puffs; } }, "+"),
+        h("label", { class: "row small", style: "margin-left:12px;gap:8px" }, controller, "Dauertherapie genommen")),
+      h("div", { class: "label" }, "Beschwerden"),
+      h("div", { class: "chips" }, Object.entries(a.symptom_names).map(([k, l]) => chip(k, l, sym))),
+      h("div", { class: "row small" }, "Stärke", seg([[1, "leicht"], [2, "mittel"], [3, "stark"]], 2, (v) => { severity = v; })),
+      h("div", { class: "label" }, "Mögliche Auslöser"),
+      h("div", { class: "chips" }, Object.entries(a.trigger_names).map(([k, l]) => chip(k, l, trig))),
+      h("div", { class: "grid2" }, h("label", { class: "field" }, h("span", {}, "Peak-Flow (l/min)"), pf), h("label", { class: "field" }, h("span", {}, "Zeitpunkt"), when)),
+      note,
+      h("button", { class: "btn", style: "width:100%;justify-content:center" }, "Speichern"));
+
+    const ctrlColor = { kontrolliert: "--good", "teilweise kontrolliert": "--warn", "nicht kontrolliert": "--brand" }[a.control] || "--muted";
+    const control = h("div", { class: "card c5 stack" }, h("h2", {}, "Asthma-Kontrolle · 4 Wochen"),
+      h("div", { class: "num", style: `color:${css(ctrlColor)}` }, a.control || "noch keine Einträge"),
+      h("div", { class: "list small" }, a.questions.map((q) => h("div", { class: "row between", style: "flex-wrap:nowrap" }, h("span", {}, q.q),
+        h("span", { class: q.yes ? "pill red" : "pill" }, q.yes ? "ja" : "nein")))),
+      h("p", { class: "small muted", style: "margin:0" }, "Angelehnt an die GINA-Kontrollfragen. Nur zur Orientierung – Änderungen an der Therapie immer mit der Ärztin oder dem Arzt besprechen."));
+
+    const tl = a.timeline;
+    const best = a.peakflow?.best;
+    const symColor = (x) => x.severity >= 3 ? css("--brand") : x.severity === 2 ? css("--warn") : css("--light");
+    const entries = [...a.entries].reverse().slice(0, 30);
+    const KIND = { reliever: "Notfallspray", controller: "Dauertherapie", symptom: "Beschwerden", peakflow: "Peak-Flow", trigger: "Auslöser", note: "Notiz" };
+    const describe = (e) => e.kind === "reliever" || e.kind === "controller" ? `${e.value || 1} Hub/Hübe` : e.kind === "peakflow" ? `${Math.round(e.value)} l/min`
+      : e.kind === "symptom" ? (e.detail || "").split(",").map((k) => a.symptom_names[k] || k).join(", ") + (e.value ? ` (${["", "leicht", "mittel", "stark"][e.value]})` : "")
+      : e.kind === "trigger" ? (e.detail || "").split(",").map((k) => a.trigger_names[k] || k).join(", ") : e.detail;
+    const list = h("div", { class: "list small" }, entries.map((e) => h("div", { class: "row between", style: "flex-wrap:nowrap" },
+      h("div", {}, h("b", {}, KIND[e.kind]), " ", describe(e), h("div", { class: "muted" }, new Date(e.ts * 1000).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))),
+      h("button", { class: "btn outline small", onclick: async () => { if (!confirm("Eintrag löschen?")) return; await api(`/api/diary/${e.id}`, { method: "DELETE" }); route(); } }, "Löschen"))));
+    return h("div", {},
+      h("div", { class: "top" }, h("div", {}, h("h1", {}, "Asthma-Tagebuch"), h("div", { class: "sub" }, "Notfallspray, Beschwerden, Peak-Flow und Auslöser – zusammen mit den Nachtwerten deiner Uhr"))),
+      h("div", { class: "grid" },
+        tile("Notfallspray heute", a.today.reliever, "Hübe", a.today.controller ? "Dauertherapie ✓" : "Dauertherapie heute noch nicht eingetragen"),
+        tile("Spray · 7 Tage", a.reliever_7d, "Hübe", `an ${a.reliever_days_7d} Tagen · Woche davor ${a.reliever_prev_7d}`),
+        tile("Peak-Flow", a.peakflow ? Math.round(a.peakflow.value) : null, "l/min", a.peakflow ? `${a.peakflow.pct} % vom Bestwert (${Math.round(a.peakflow.best)})` : "noch nicht gemessen",
+          a.peakflow ? css({ grün: "--good", gelb: "--warn", rot: "--brand" }[a.peakflow.zone]) : null),
+        tile("Häufigster Auslöser", a.triggers[0]?.name || null, "", a.triggers[0] ? `an ${a.triggers[0].days} Tagen` : ""),
+        form, control,
+        h("div", { class: "card c6" }, h("h2", {}, "Notfallspray · 30 Tage"),
+          chartBox(160, (b) => C.bars(b, tl.map((x) => ({ label: dayLabel(x.date), value: x.reliever, tip: `${dayLabel(x.date)}: ${x.reliever} Hübe`, color: css("--brand") })), { height: 160 }))),
+        h("div", { class: "card c6" }, h("h2", {}, "Peak-Flow"), h("div", { class: "small muted", style: "margin-bottom:6px" }, best ? `Grüner Bereich ab ${Math.round(best * 0.8)} l/min (80 % vom Bestwert)` : ""),
+          chartBox(160, (b) => C.line(b, [{ points: tl.filter((x) => x.peakflow).map((x) => [new Date(x.date + "T12:00").getTime() / 1000, x.peakflow]), color: css("--info"), dots: true, fmt: (v) => Math.round(v) + " l/min" }],
+            { height: 160, band: best ? [best * 0.8, best * 1.2] : undefined, ref: best ? best * 0.5 : undefined, xFmt: (v) => new Date(v * 1000).toLocaleDateString("de-DE", { day: "numeric", month: "numeric" }) }))),
+        h("div", { class: "card c12" }, h("h2", {}, "Beschwerden · 30 Tage"),
+          h("div", { class: "cal" }, tl.map((x) => h("div", { class: "d", title: `${dayLabel(x.date)}: ${x.symptoms.map((k) => a.symptom_names[k] || k).join(", ") || "keine"}`,
+            style: x.symptoms.length ? `background:${symColor(x)}` : "" }, h("span", {}, new Date(x.date + "T12:00").getDate())))),
+          h("div", { class: "legend", style: "margin-top:8px" }, [["--light", "leicht"], ["--warn", "mittel"], ["--brand", "stark"]].map(([c, l]) => h("span", {}, h("i", { style: `background:${css(c)}` }), l)))),
+        h("div", { class: "card c12 stack" }, h("h2", {}, "Einträge"), entries.length ? list : h("div", { class: "empty small" }, "Noch keine Einträge"))));
+  }
+
+  // ------------------------------------------------------------------ profile (goals + location)
+  function profileCard(card) {
+    const steps = h("input", { type: "number", min: 1000, max: 50000, step: 500, value: me.goal_steps });
+    const sleepH = h("input", { type: "number", min: 4, max: 12, step: 0.25, value: me.goal_sleep_min / 60 });
+    const place = h("div", { class: "small" }, me.location ? `Ort: ${me.location.name || `${me.location.lat}, ${me.location.lon}`}` : "Noch kein Ort – für Pollen & Luftqualität");
+    const q = h("input", { type: "text", placeholder: "Ort suchen, z. B. Leipzig" });
+    const results = h("div", { class: "list small" });
+    const setLoc = async (loc) => { me = await api("/api/me/settings", { json: { location: loc } }); place.textContent = loc ? `Ort: ${loc.name}` : "Kein Ort"; results.textContent = ""; toast("Gespeichert"); };
+    let t;
+    q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(async () => {
+      results.textContent = "";
+      if (q.value.trim().length < 2) return;
+      try {
+        const list = await api(`/api/geo?q=${encodeURIComponent(q.value.trim())}`);
+        list.forEach((r) => results.append(h("a", { href: "#", class: "item", onclick: (e) => { e.preventDefault(); setLoc({ lat: r.lat, lon: r.lon, name: r.name }); q.value = ""; } },
+          h("b", {}, r.name), h("span", { class: "muted" }, r.region))));
+        if (!list.length) results.append(h("div", { class: "muted" }, "Nichts gefunden"));
+      } catch (e) { results.append(h("div", { class: "muted" }, e.message)); }
+    }, 350); });
+    return card("Ziele & Ort",
+      h("div", { class: "grid2" }, h("label", { class: "field" }, h("span", {}, "Schritte pro Tag"), steps), h("label", { class: "field" }, h("span", {}, "Schlaf pro Nacht (h)"), sleepH)),
+      h("button", { class: "btn tonal", onclick: async () => {
+        try { me = await api("/api/me/settings", { json: { goal_steps: +steps.value, goal_sleep_min: Math.round(+sleepH.value * 60) } }); toast("Ziele gespeichert"); } catch (e) { toast(e.message); }
+      } }, "Ziele speichern"),
+      place, q, results,
+      h("div", { class: "row" },
+        navigator.geolocation ? h("button", { class: "btn outline small", onclick: () => navigator.geolocation.getCurrentPosition(
+          (p) => setLoc({ lat: p.coords.latitude, lon: p.coords.longitude, name: "Mein Standort" }), () => toast("Standort nicht verfügbar")) }, "Aktuellen Standort verwenden") : null,
+        me.location ? h("button", { class: "btn outline small", onclick: () => setLoc(null) }, "Ort entfernen") : null));
+  }
+
+  let installEvt = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; });
+  function installBtn() {
+    return h("button", { class: "btn tonal", onclick: async () => {
+      if (installEvt) { installEvt.prompt(); installEvt = null; } else toast("Über das Browsermenü installieren");
+    } }, "Als App installieren");
+  }
+
+  // ------------------------------------------------------------------ doctor report (printable)
+  async function reportPage() {
+    let days = 28;
+    const box = h("div", {}, h("div", { class: "loading" }, "Lädt …"));
+    const load = async () => {
+      const r = await api(`/api/report?days=${days}`);
+      const s = r.summary, a = r.asthma, ins = r.insights;
+      const row = (k, v) => h("tr", {}, h("td", {}, k), h("td", {}, v ?? "–"));
+      const nights = r.nights;
+      box.replaceChildren(h("div", { class: "report" },
+        h("div", { class: "row between" }, h("div", {}, h("h1", {}, "Gesundheitsbericht"),
+          h("div", { class: "sub" }, `${r.user} · ${new Date(r.from).toLocaleDateString("de-DE")} – ${new Date(r.to).toLocaleDateString("de-DE")} · erstellt ${new Date(r.created).toLocaleString("de-DE")}`)),
+          h("img", { src: "/static/icon.svg", alt: "", style: "width:42px" })),
+        h("h2", {}, "Zusammenfassung"),
+        h("table", { class: "kv" },
+          row("Schlaf Ø pro Nacht", s.sleep_h != null ? `${fmt1(s.sleep_h)} h (${s.nights} Nächte, Effizienz ${fmt1(s.efficiency)} %)` : null),
+          row("Wach pro Nacht Ø", s.awake_min != null ? `${Math.round(s.awake_min)} min` : null),
+          row("Ruhepuls Ø", s.resting_hr != null ? `${Math.round(s.resting_hr)} bpm` : null),
+          row("SpO₂ Ø (Tag)", s.spo2 != null ? `${fmt1(s.spo2)} %` : null),
+          row("Schritte Ø pro Tag", s.steps != null ? nf.format(Math.round(s.steps)) : null),
+          row("Erholung (heute)", ins.recovery != null ? `${ins.recovery} / 100` : null),
+          row("Trainings", `${r.workouts.length}`)),
+        h("h2", {}, "Atmung in der Nacht"),
+        ins.spo2_nights.length ? h("table", { class: "grid-table" }, h("tr", {}, ["Nacht", "SpO₂ Ø", "min", "Messwerte < 92 %", "< 90 %"].map((x) => h("th", {}, x))),
+          ins.spo2_nights.map((n) => h("tr", {}, h("td", {}, dayLabel(n.night_of)), h("td", {}, fmt1(n.avg) + " %"), h("td", { class: n.min < 90 ? "bad" : "" }, n.min + " %"), h("td", {}, n.below92), h("td", {}, n.below90))))
+          : h("p", { class: "muted small" }, "Keine nächtlichen Sauerstoffwerte."),
+        ins.respiratory_nights.length ? h("p", { class: "small" }, "Atemfrequenz im Schlaf: ", ins.respiratory_nights.map((n) => `${dayLabel(n.night_of)} ${fmt1(n.avg)}/min`).join(" · ")) : null,
+        h("h2", {}, "Asthma-Tagebuch"),
+        a.has_data ? h("div", {},
+          h("table", { class: "kv" },
+            row("Kontrolle (4 Wochen)", a.control),
+            ...a.questions.map((q) => row(q.q, q.yes ? "ja" : "nein")),
+            row("Notfallspray letzte 7 Tage", `${a.reliever_7d} Hübe an ${a.reliever_days_7d} Tagen (Woche davor ${a.reliever_prev_7d})`),
+            row("Peak-Flow zuletzt", a.peakflow ? `${Math.round(a.peakflow.value)} l/min = ${a.peakflow.pct} % vom Bestwert ${Math.round(a.peakflow.best)} (${a.peakflow.zone})` : null),
+            row("Häufige Auslöser", a.triggers.map((t) => `${t.name} (${t.days}×)`).join(", ") || null)),
+          h("div", { style: "height:120px;margin-top:10px" }, (() => { const b = h("div", { style: "height:120px" }); requestAnimationFrame(() => C.bars(b, a.timeline.map((x) => ({ label: dayLabel(x.date), value: x.reliever, color: css("--brand") })), { height: 120 })); return b; })()),
+          h("div", { class: "small muted" }, "Hübe Notfallspray pro Tag (30 Tage)"))
+          : h("p", { class: "muted small" }, "Keine Tagebucheinträge."),
+        h("h2", {}, "Auffälligkeiten"),
+        h("ul", {}, ins.flags.filter((f) => f.level !== "good").map((f) => h("li", {}, h("b", {}, `${f.area}: ${f.title}. `), f.detail))),
+        h("h2", {}, "Nächte"),
+        h("table", { class: "grid-table" }, h("tr", {}, ["Nacht", "Schlaf", "Tief", "REM", "Wach", "Effizienz"].map((x) => h("th", {}, x))),
+          nights.slice(-21).reverse().map((n) => h("tr", {}, h("td", {}, dayLabel(n.night_of)), h("td", {}, hmShort(n.asleep_min)), h("td", {}, hmShort(n.deep_min)), h("td", {}, hmShort(n.rem_min)), h("td", {}, hmShort(n.awake_min)), h("td", {}, fmt1(n.efficiency) + " %")))),
+        h("p", { class: "small muted" }, ins.disclaimer + " Messwerte einer Fitnessuhr (CMF Watch), keine Medizinprodukt-Messung.")));
+    };
+    load().catch((e) => box.replaceChildren(h("div", { class: "card" }, e.message)));
+    return h("div", {},
+      h("div", { class: "top noprint" }, h("div", {}, h("h1", {}, "Arztbericht"), h("div", { class: "sub" }, "Zum Ausdrucken oder als PDF speichern und zum Termin mitnehmen")),
+        h("div", { class: "row" }, seg([[14, "2 Wochen"], [28, "4 Wochen"], [90, "3 Monate"]], 28, (v) => { days = v; load(); }),
+          h("button", { class: "btn", onclick: () => window.print() }, "Drucken / PDF"))),
+      h("div", { class: "card" }, box));
+  }
+
+  // ------------------------------------------------------------------ server settings (admin)
+  async function serverPage() {
+    if (!me.is_admin) return h("div", { class: "card" }, "Nur für Admins.");
+    let data = await api("/api/admin/settings");
+    const st = data.settings;
+    const inputs = {};
+    const val = (k) => st[k].value;
+    const text = (k, label, ph, type = "text") => {
+      const i = h("input", { type, value: val(k) ?? "", placeholder: ph || "" });
+      inputs[k] = () => (type === "number" ? (i.value === "" ? null : +i.value) : i.value.trim());
+      return h("label", { class: "field" }, h("span", {}, label, src(k)), i);
+    };
+    const secret = (k, label) => {
+      const i = h("input", { type: "password", autocomplete: "new-password", placeholder: st[k].set ? "•••••• gespeichert – leer lassen = behalten" : "" });
+      const clear = h("input", { type: "checkbox" });
+      inputs[k] = () => (clear.checked ? "" : i.value ? i.value : null);
+      return h("label", { class: "field" }, h("span", {}, label, src(k)), i,
+        st[k].set ? h("label", { class: "row small muted", style: "gap:6px;margin-top:4px" }, clear, "löschen") : null);
+    };
+    const toggle = (k, label, sub) => {
+      const i = h("input", { type: "checkbox", checked: !!val(k) });
+      inputs[k] = () => i.checked;
+      return h("label", { class: "switch" }, h("span", {}, label, sub ? h("div", { class: "small muted" }, sub) : null), i);
+    };
+    function src(k) { const s = st[k].source; return s === "env" ? h("em", { class: "src" }, " · aus Umgebungsvariable") : s === "ui" ? null : null; }
+    const collect = (keys) => Object.fromEntries(keys.map((k) => [k, inputs[k]()]));
+    const statusBox = h("div", { class: "stack" });
+    const renderStatus = (list) => {
+      statusBox.textContent = "";
+      if (!list.length) statusBox.append(h("div", { class: "small muted" }, "Keine Verbindung aktiv – MQTT einschalten und Broker eintragen."));
+      list.forEach((p) => statusBox.append(h("div", { class: "row small" },
+        h("span", { class: "dot", style: `background:${css(p.connected ? "--good" : "--brand")}` }),
+        h("b", {}, p.type === "mqtt" ? `MQTT ${p.host}:${p.port}` : `HA-API ${p.host}`),
+        h("span", { class: "muted" }, p.connected ? `verbunden${p.since ? " seit " + new Date(p.since * 1000).toLocaleTimeString("de-DE") : ""}${p.messages != null ? ` · ${nf.format(p.messages)} Nachrichten` : ""}` : (p.error || "verbindet …")))));
+    };
+    renderStatus(data.status);
+    const poll = setInterval(async () => {
+      if (!document.body.contains(statusBox)) return clearInterval(poll);
+      try { renderStatus((await api("/api/admin/settings")).status); } catch { clearInterval(poll); }
+    }, 4000);
+    const saveBtn = (keys, label = "Speichern") => h("button", { class: "btn", type: "button", onclick: async (e) => {
+      e.target.disabled = true;
+      try { data = await api("/api/admin/settings", { json: collect(keys) }); renderStatus(data.status); me = await api("/api/me"); toast("Gespeichert – Verbindung wird neu aufgebaut"); }
+      catch (ex) { toast(ex.message); } finally { e.target.disabled = false; }
+    } }, label);
+    const testOut = h("div", { class: "small" });
+    const MQTT = ["mqtt_enabled", "mqtt_host", "mqtt_port", "mqtt_user", "mqtt_password", "mqtt_tls", "mqtt_tls_insecure", "mqtt_client_id", "discovery_prefix", "base_topic", "device_name"];
+    const mqttCard = h("div", { class: "card c7 stack" }, h("h2", {}, "MQTT-Broker (Home Assistant)"),
+      h("p", { class: "small muted", style: "margin:0" }, "CMF Health verbindet sich als Client mit deinem bestehenden Broker (z. B. dem Mosquitto-Add-on von Home Assistant). Die Sensoren erscheinen dann automatisch per MQTT-Discovery."),
+      toggle("mqtt_enabled", "MQTT verwenden"),
+      h("div", { class: "grid2" }, text("mqtt_host", "Host / IP", "192.168.1.10 oder core-mosquitto"), text("mqtt_port", "Port", "1883", "number")),
+      h("div", { class: "grid2" }, text("mqtt_user", "Benutzer", "optional"), secret("mqtt_password", "Passwort")),
+      toggle("mqtt_tls", "TLS verschlüsseln", "meist Port 8883"), toggle("mqtt_tls_insecure", "Zertifikat nicht prüfen", "nur für selbstsignierte Zertifikate"),
+      h("details", {}, h("summary", { class: "small" }, "Erweitert"),
+        h("div", { class: "grid2", style: "margin-top:10px" }, text("discovery_prefix", "Discovery-Präfix", "homeassistant"), text("base_topic", "Basis-Topic", "cmfwatch")),
+        h("div", { class: "grid2" }, text("device_name", "Gerätename in HA", "CMF Watch Pro 3"), text("mqtt_client_id", "Client-ID", "cmfserver-cmf_watch"))),
+      h("div", { class: "row" }, saveBtn(MQTT),
+        h("button", { class: "btn tonal", type: "button", onclick: async () => {
+          testOut.textContent = "Teste …";
+          try { const r = await api("/api/admin/mqtt/test", { json: collect(["mqtt_host", "mqtt_port", "mqtt_user", "mqtt_password", "mqtt_tls", "mqtt_tls_insecure"]) });
+            testOut.textContent = r.ok ? `✓ Broker erreichbar, Anmeldung ok (${r.ms} ms)` : `✗ ${r.error}`; testOut.style.color = css(r.ok ? "--good" : "--brand"); }
+          catch (ex) { testOut.textContent = ex.message; }
+        } }, "Verbindung testen")), testOut);
+    const statusCard = h("div", { class: "card c5 stack" }, h("h2", {}, "Status"), statusBox,
+      h("p", { class: "small muted", style: "margin:0" }, `cmfserver ${data.version}. Werte werden bei jedem Upload und alle ${val("publish_interval")} s gesendet.`),
+      h("button", { class: "btn tonal small", onclick: async () => { await api("/api/publish", { json: {} }); toast("Gesendet"); } }, "Jetzt senden"));
+    const HA = ["ha_url", "ha_token"];
+    const haCard = h("div", { class: "card c6 stack" }, h("h2", {}, "Home-Assistant-API (statt MQTT)"),
+      h("p", { class: "small muted", style: "margin:0" }, "Alternative ohne Broker: Werte direkt über die REST-API setzen (Langzeit-Zugangstoken aus dem HA-Profil)."),
+      text("ha_url", "Home-Assistant-Adresse", "http://homeassistant.local:8123"), secret("ha_token", "Zugangstoken"), saveBtn(HA));
+    const AI = ["llm_base_url", "llm_model", "llm_api_key"];
+    const aiOut = h("div", { class: "small" });
+    const aiCard = h("div", { class: "card c6 stack" }, h("h2", {}, "KI (LiteLLM / OpenAI-kompatibel)"),
+      h("p", { class: "small muted", style: "margin:0" }, `Status: ${data.ai ? "aktiv" : "nicht eingerichtet"}. Es werden nur zusammengefasste Werte gesendet, keine Rohdaten.`),
+      text("llm_base_url", "Endpunkt", "https://litellm.example.de"), text("llm_model", "Modell", "z. B. gpt-4o-mini"), secret("llm_api_key", "API-Key"),
+      h("div", { class: "row" }, saveBtn(AI), h("button", { class: "btn tonal", type: "button", onclick: async () => {
+        aiOut.textContent = "Teste …";
+        const r = await api("/api/admin/ai/test", { json: {} }).catch((e) => ({ ok: false, error: e.message }));
+        aiOut.textContent = r.ok ? `✓ Antwort „${r.answer}“ in ${r.ms} ms` : `✗ ${r.error}`; aiOut.style.color = css(r.ok ? "--good" : "--brand");
+      } }, "Testen")), aiOut);
+    const signup = h("select", {}, h("option", { value: "first", selected: val("signup") === "first" }, "Nur der Admin legt Konten an"), h("option", { value: "open", selected: val("signup") === "open" }, "Jeder darf sich registrieren"));
+    inputs.signup = () => signup.value;
+    const GEN = ["signup", "public_url", "publish_interval"];
+    const genCard = h("div", { class: "card c6 stack" }, h("h2", {}, "Allgemein"),
+      h("label", { class: "field" }, h("span", {}, "Registrierung"), signup),
+      text("public_url", "Öffentliche Adresse (für die App-Links)", "https://health.example.de"),
+      text("publish_interval", "Sende-Intervall an Home Assistant (Sekunden)", "300", "number"), saveBtn(GEN));
+
+    // users
+    const usersBox = h("div", { class: "list small" });
+    const renderUsers = (list) => {
+      usersBox.textContent = "";
+      list.forEach((u) => usersBox.append(h("div", { class: "row between" },
+        h("span", {}, h("b", {}, u.username), u.is_admin ? h("span", { class: "pill", style: "margin-left:8px" }, "Admin") : null),
+        u.id === me.id ? h("span", { class: "muted" }, "du") : h("span", { class: "row", style: "gap:6px" },
+          h("button", { class: "btn outline small", onclick: async () => { const pw = prompt(`Neues Passwort für ${u.username} (min. 8 Zeichen):`); if (!pw) return; try { renderUsers(await api(`/api/admin/users/${u.id}`, { json: { password: pw } })); toast("Passwort gesetzt"); } catch (e) { toast(e.message); } } }, "Passwort"),
+          h("button", { class: "btn outline small", onclick: async () => renderUsers(await api(`/api/admin/users/${u.id}`, { json: { is_admin: !u.is_admin } })) }, u.is_admin ? "Admin entziehen" : "Zum Admin"),
+          h("button", { class: "btn outline small", onclick: async () => { if (!confirm(`Konto ${u.username} mit allen Daten löschen?`)) return; renderUsers(await api(`/api/admin/users/${u.id}`, { method: "DELETE" })); } }, "Löschen")))));
+    };
+    api("/api/admin/users").then(renderUsers);
+    const nu = h("input", { type: "text", placeholder: "Benutzername" }), np = h("input", { type: "password", placeholder: "Passwort (min. 8)", autocomplete: "new-password" });
+    const usersCard = h("div", { class: "card c12 stack" }, h("h2", {}, "Benutzer"), usersBox, h("form", { class: "row", onsubmit: async (e) => {
+      e.preventDefault();
+      try { renderUsers(await api("/api/admin/users", { json: { username: nu.value, password: np.value } })); nu.value = np.value = ""; toast("Konto angelegt"); } catch (ex) { toast(ex.message); }
+    } }, h("div", { style: "flex:1;min-width:160px" }, nu), h("div", { style: "flex:1;min-width:160px" }, np), h("button", { class: "btn tonal" }, "Konto anlegen")));
+
+    return h("div", {},
+      h("div", { class: "top" }, h("div", {}, h("h1", {}, "Server"), h("div", { class: "sub" }, "Nur für Admins · Einstellungen hier überschreiben die Umgebungsvariablen"))),
+      h("div", { class: "grid" }, mqttCard, statusCard, haCard, aiCard, genCard, usersCard));
+  }
+
+  if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 
   route();
 })();

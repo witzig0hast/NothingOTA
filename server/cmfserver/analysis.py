@@ -67,7 +67,7 @@ def resting_hr_by_day(store: Store, uid: int, daily: list[dict]) -> dict[str, fl
     return r
 
 
-def insights(store: Store, uid: int, today: date | None = None) -> dict:
+def insights(store: Store, uid: int, today: date | None = None, extra: list[dict] | None = None) -> dict:
     today = today or datetime.now().astimezone().date()
     daily = store.daily(uid, 40)
     nights = store.nights(uid, 35)
@@ -199,6 +199,9 @@ def insights(store: Store, uid: int, today: date | None = None) -> dict:
     if recovery is not None and any(f["level"] == "alert" for f in flags):
         recovery = min(recovery, 60)  # never "fully recovered" while an alert is open
 
+    flags.extend(extra or [])
+    if recovery is not None and any(f["level"] == "alert" for f in flags):
+        recovery = min(recovery, 60)
     order = {"alert": 0, "warn": 1, "info": 2, "good": 3}
     flags.sort(key=lambda f: order[f["level"]])
     return {"flags": flags, "recovery": recovery, "spo2_nights": spo2[-14:],
@@ -207,9 +210,9 @@ def insights(store: Store, uid: int, today: date | None = None) -> dict:
             "disclaimer": DISCLAIMER}
 
 
-def ai_context(store: Store, uid: int) -> dict:
+def ai_context(store: Store, uid: int, health: dict | None = None) -> dict:
     """Compact summary for the language model (few tokens, no raw samples)."""
-    ins = insights(store, uid)
+    ins = health["insights"] if health else insights(store, uid)
     daily = store.daily(uid, 14)
     nights = [n for n in store.nights(uid, 14)]
     return {
@@ -222,4 +225,27 @@ def ai_context(store: Store, uid: int) -> dict:
         "erholung_0_100": ins["recovery"],
         "auffaelligkeiten": [{k: f[k] for k in ("level", "area", "title", "detail")} for f in ins["flags"]],
         "trainings": [{k: w.get(k) for k in ("start", "type", "duration_min", "distance_km", "avg_hr")} for w in store.workouts(uid, 10)],
+        **_extra_context(health),
     }
+
+
+def _extra_context(health: dict | None) -> dict:
+    out = {}
+    if not health:
+        return out
+    a = health.get("asthma")
+    if a and a.get("has_data"):
+        out["asthma_tagebuch"] = {
+            "kontrolle": a["control"], "kontrollfragen": {q["q"]: q["yes"] for q in a["questions"]},
+            "peak_flow": a["peakflow"], "notfallspray_7_tage": a["reliever_7d"], "woche_davor": a["reliever_prev_7d"],
+            "ausloeser": [t["name"] for t in a["triggers"][:5]],
+            "tage": [{k: d[k] for k in ("date", "reliever", "symptoms", "peakflow", "triggers")}
+                     for d in a["timeline"][-14:] if d["reliever"] or d["symptoms"] or d["peakflow"]],
+        }
+    e = health.get("environment")
+    if e:
+        out["umwelt_heute"] = {"ort": e.get("place"), "luftqualitaet_eaqi": e.get("aqi"), "bewertung": e.get("aqi_label"),
+                               "pollen": {p["name"]: p["today_max"] for p in e["pollen"] if p["level"]},
+                               "pollen_morgen": {p["name"]: p["tomorrow_max"] for p in e["pollen"] if p["level_tomorrow"]},
+                               "wetter": e.get("weather")}
+    return out

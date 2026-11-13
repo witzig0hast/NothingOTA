@@ -56,6 +56,14 @@ SENSORS = [
     Sensor("last_workout_duration", "Letztes Training Dauer", "min", "duration", None, "mdi:timer-outline"),
     Sensor("last_workout_avg_hr", "Letztes Training Ø Puls", "bpm", None, None, "mdi:heart-pulse"),
     Sensor("last_upload", "Letzte Synchronisierung", None, "timestamp", None, "mdi:cloud-upload"),
+    Sensor("steps_goal", "Schrittziel erreicht", "%", None, "measurement", "mdi:flag-checkered"),
+    Sensor("recovery", "Erholung", "%", None, "measurement", "mdi:battery-heart-variant"),
+    Sensor("health_status", "Gesundheitsstatus", None, None, None, "mdi:shield-alert-outline"),
+    Sensor("inhaler_today", "Notfallspray heute", "Hübe", None, "measurement", "mdi:spray"),
+    Sensor("asthma_control", "Asthma-Kontrolle", None, None, None, "mdi:lungs"),
+    Sensor("peak_flow", "Peak-Flow", "L/min", None, "measurement", "mdi:gauge"),
+    Sensor("air_quality", "Luftqualität (EAQI)", None, "aqi", "measurement", None),
+    Sensor("pollen", "Pollenbelastung", None, None, None, "mdi:flower-pollen"),
 ]
 
 
@@ -76,30 +84,45 @@ def target(cfg: Config, user: dict | None) -> Target:
 
 class MqttPublisher:
     def __init__(self, cfg: Config):
-        import paho.mqtt.client as mqtt
-
         self.cfg = cfg
         self.connected = threading.Event()
         self.announced: set[str] = set()
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"cmfserver-{cfg.device_id}")
-        if cfg.mqtt_user:
-            self.client.username_pw_set(cfg.mqtt_user, cfg.mqtt_password)
-        if cfg.mqtt_tls:
-            self.client.tls_set()
+        self.last: dict[str, tuple[dict, Target]] = {}
+        self.error: str | None = None
+        self.since: float | None = None
+        self.messages = 0
+        self.client = make_client(cfg)
         self.avail_topic = f"{cfg.base_topic}/status"
         self.client.will_set(self.avail_topic, "offline", retain=True)
         self.client.on_connect = self._on_connect
-        self.client.on_disconnect = lambda *a: self.connected.clear()
+        self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
         self.client.reconnect_delay_set(1, 60)
-        self.client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=60)
+        try:
+            self.client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=60)
+        except Exception as e:  # noqa: BLE001 - e.g. bad host name
+            self.error = str(e)
         self.client.loop_start()
-        self.last: dict[str, tuple[dict, Target]] = {}
+
+    def status(self) -> dict:
+        return {"type": "mqtt", "host": self.cfg.mqtt_host, "port": self.cfg.mqtt_port,
+                "connected": self.connected.is_set(), "error": None if self.connected.is_set() else self.error,
+                "since": self.since, "messages": self.messages, "devices": sorted(self.last)}
+
+    def _on_disconnect(self, client, userdata, flags=None, reason_code=None, properties=None):
+        self.connected.clear()
+        if reason_code is not None and getattr(reason_code, "is_failure", False):
+            self.error = f"Verbindung getrennt: {reason_code}"
+        elif not self.error:
+            self.error = "Verbindung getrennt"
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
         if reason_code.is_failure:
             log.error("MQTT-Verbindung abgelehnt: %s", reason_code)
+            self.error = f"Broker lehnt ab: {reason_code}"
             return
+        import time as _t
+        self.error, self.since = None, _t.time()
         log.info("MQTT verbunden mit %s:%s", self.cfg.mqtt_host, self.cfg.mqtt_port)
         self.announced.clear()
         client.publish(self.avail_topic, "online", retain=True)
@@ -150,13 +173,66 @@ class MqttPublisher:
             if s.key in state:
                 self.client.publish(f"{t.base}/{s.key}", str(state[s.key]), retain=True)
                 self.client.publish(f"{t.base}/{s.key}/attributes", json.dumps(attrs.get(s.key, {}), default=str), retain=True)
+                self.messages += 2
         self.client.publish(f"{t.base}/state", json.dumps(state, default=str), retain=True)
+        self.messages += 1
         return True
 
     def close(self) -> None:
-        self.client.publish(self.avail_topic, "offline", retain=True)
+        try:
+            if self.connected.is_set():
+                self.client.publish(self.avail_topic, "offline", retain=True).wait_for_publish(2)
+            self.client.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
         self.client.loop_stop()
-        self.client.disconnect()
+
+
+def make_client(cfg: Config, suffix: str = ""):
+    import paho.mqtt.client as mqtt
+
+    cid = (cfg.mqtt_client_id or f"cmfserver-{cfg.device_id}") + suffix
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
+    if cfg.mqtt_user:
+        client.username_pw_set(cfg.mqtt_user, cfg.mqtt_password or None)
+    if cfg.mqtt_tls:
+        import ssl
+        client.tls_set(cert_reqs=ssl.CERT_NONE if cfg.mqtt_tls_insecure else ssl.CERT_REQUIRED)
+        if cfg.mqtt_tls_insecure:
+            client.tls_insecure_set(True)
+    return client
+
+
+def test_mqtt(cfg: Config, timeout: float = 6.0) -> dict:
+    """Connect once with these settings and report what the broker says."""
+    import time as _t
+
+    if not cfg.mqtt_host:
+        return {"ok": False, "error": "Kein Host eingetragen"}
+    result: dict = {}
+    done = threading.Event()
+    client = make_client(cfg, suffix="-test")
+
+    def on_connect(c, u, flags, rc, props=None):
+        result.update(ok=not rc.is_failure, error=None if not rc.is_failure else f"Broker lehnt ab: {rc}")
+        done.set()
+
+    client.on_connect = on_connect
+    t0 = _t.time()
+    try:
+        client.connect(cfg.mqtt_host, cfg.mqtt_port, keepalive=10)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Keine Verbindung zu {cfg.mqtt_host}:{cfg.mqtt_port}: {e}"}
+    client.loop_start()
+    if not done.wait(timeout):
+        result = {"ok": False, "error": "Keine Antwort vom Broker (Zeitüberschreitung)"}
+    client.loop_stop()
+    try:
+        client.disconnect()
+    except Exception:  # noqa: BLE001
+        pass
+    result["ms"] = round((_t.time() - t0) * 1000)
+    return result
 
 
 class RestPublisher:
@@ -164,8 +240,15 @@ class RestPublisher:
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
+        self.error: str | None = None
+        self.ok_at: float | None = None
+
+    def status(self) -> dict:
+        return {"type": "rest", "host": self.cfg.ha_url, "connected": self.ok_at is not None and not self.error,
+                "error": self.error, "since": self.ok_at}
 
     def publish(self, payload: dict, user: dict | None = None) -> bool:
+        import time as _t
         ok = True
         t = target(self.cfg, user)
         state, attrs = payload["state"], payload["attributes"]
@@ -185,7 +268,11 @@ class RestPublisher:
                 urllib.request.urlopen(req, timeout=10).close()
             except Exception as e:  # noqa: BLE001
                 log.warning("HA REST %s fehlgeschlagen: %s", s.key, e)
+                self.error = str(e)
                 ok = False
+                break
+        if ok:
+            self.error, self.ok_at = None, _t.time()
         return ok
 
     def close(self) -> None:
@@ -194,10 +281,10 @@ class RestPublisher:
 
 def make_publishers(cfg: Config) -> list:
     pubs = []
-    if cfg.mqtt_host:
+    if cfg.mqtt_enabled and cfg.mqtt_host:
         pubs.append(MqttPublisher(cfg))
     if cfg.ha_url and cfg.ha_token:
         pubs.append(RestPublisher(cfg))
     if not pubs:
-        log.warning("Weder MQTT_HOST noch HA_URL/HA_TOKEN gesetzt – Daten werden nur gespeichert (GET /api/latest).")
+        log.warning("Kein MQTT-Broker und keine HA-REST-Verbindung eingerichtet – der Admin kann das auf der Website unter Konto → Server eintragen.")
     return pubs
