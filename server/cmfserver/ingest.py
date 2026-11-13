@@ -33,7 +33,7 @@ def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
             shutil.copyfileobj(src, dst)
 
 
-EXPORT_MARKERS = ("daily_summary.csv", "sleep_sessions.csv", "battery.csv", "heart_rate.csv", "workouts.csv")
+EXPORT_MARKERS = ("daily_summary.csv", "sleep_sessions.csv", "battery.csv", "heart_rate.csv", "workouts.csv", "track.csv")
 
 
 def _find_export_root(d: Path) -> Path | None:
@@ -53,7 +53,7 @@ def _find_gadgetbridge_db(d: Path) -> Path | None:
     return None
 
 
-def ingest_file(store: Store, path: Path, name: str | None = None) -> dict:
+def ingest_file(store: Store, uid: int, path: Path, name: str | None = None) -> dict:
     """Detects the file type, converts and merges it. Returns a summary dict."""
     name = name or path.name
     with tempfile.TemporaryDirectory(prefix="cmfserver-") as tmp:
@@ -70,7 +70,7 @@ def ingest_file(store: Store, path: Path, name: str | None = None) -> dict:
             root = _find_export_root(src)
             if root is not None:
                 # ZIP from the Android app or a cmfexport output directory
-                counts = store.ingest_dir(root, windowed=True, name=name, kind="export")
+                counts = store.ingest_dir(uid, root, windowed=True, name=name, kind="export")
                 return {"kind": "export", "counts": counts}
             db = _find_gadgetbridge_db(src)
             if db is None:
@@ -83,5 +83,5 @@ def ingest_file(store: Store, path: Path, name: str | None = None) -> dict:
             gadgetbridge.export(db, out)
         except Exception as e:  # noqa: BLE001 - surface the reason to the uploader
             raise UnsupportedFile(f"Gadgetbridge-Datenbank konnte nicht gelesen werden: {e}") from e
-        counts = store.ingest_dir(out, windowed=False, name=name, kind="gadgetbridge")
+        counts = store.ingest_dir(uid, out, windowed=False, name=name, kind="gadgetbridge")
         return {"kind": "gadgetbridge", "counts": counts}

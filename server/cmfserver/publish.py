@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import urllib.request
 from dataclasses import dataclass
@@ -58,13 +59,28 @@ SENSORS = [
 ]
 
 
+@dataclass(frozen=True)
+class Target:
+    """Where one user's sensors go: the first account keeps the classic ids (cmf_watch, cmfwatch/...)."""
+    device_id: str
+    name: str
+    base: str
+
+
+def target(cfg: Config, user: dict | None) -> Target:
+    if not user or user["id"] == 1:
+        return Target(cfg.device_id, cfg.device_name, cfg.base_topic)
+    slug = re.sub(r"[^a-z0-9]+", "_", user["username"].lower()).strip("_") or str(user["id"])
+    return Target(f"{cfg.device_id}_{slug}", f"{cfg.device_name} ({user['username']})", f"{cfg.base_topic}/{slug}")
+
+
 class MqttPublisher:
     def __init__(self, cfg: Config):
         import paho.mqtt.client as mqtt
 
         self.cfg = cfg
         self.connected = threading.Event()
-        self.announced = False
+        self.announced: set[str] = set()
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"cmfserver-{cfg.device_id}")
         if cfg.mqtt_user:
             self.client.username_pw_set(cfg.mqtt_user, cfg.mqtt_password)
@@ -78,61 +94,63 @@ class MqttPublisher:
         self.client.reconnect_delay_set(1, 60)
         self.client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=60)
         self.client.loop_start()
-        self.last_payload: dict | None = None
+        self.last: dict[str, tuple[dict, Target]] = {}
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
         if reason_code.is_failure:
             log.error("MQTT-Verbindung abgelehnt: %s", reason_code)
             return
         log.info("MQTT verbunden mit %s:%s", self.cfg.mqtt_host, self.cfg.mqtt_port)
-        self.announced = False
+        self.announced.clear()
         client.publish(self.avail_topic, "online", retain=True)
-        # Re-announce when Home Assistant restarts
-        client.subscribe(f"{self.cfg.discovery_prefix}/status")
+        client.subscribe(f"{self.cfg.discovery_prefix}/status")  # re-announce when Home Assistant restarts
         self.connected.set()
-        if self.last_payload:
-            self.publish(self.last_payload)
+        for payload, t in list(self.last.values()):
+            self._publish(payload, t)
 
     def _on_message(self, client, userdata, msg):
-        if msg.payload == b"online" and self.last_payload:
-            self.announced = False
-            self.publish(self.last_payload)
+        if msg.payload == b"online":
+            self.announced.clear()
+            for payload, t in list(self.last.values()):
+                self._publish(payload, t)
 
-    def _device(self) -> dict:
-        return {"identifiers": [self.cfg.device_id], "name": self.cfg.device_name,
+    def _device(self, t: Target) -> dict:
+        return {"identifiers": [t.device_id], "name": t.name,
                 "manufacturer": "Nothing", "model": "CMF Watch", "sw_version": f"cmfserver {__version__}"}
 
-    def _announce(self) -> None:
+    def _announce(self, t: Target) -> None:
         for s in SENSORS:
             cfg = {
                 "name": s.name,
-                "unique_id": f"{self.cfg.device_id}_{s.key}",
-                "state_topic": f"{self.cfg.base_topic}/{s.key}",
-                "json_attributes_topic": f"{self.cfg.base_topic}/{s.key}/attributes",
+                "unique_id": f"{t.device_id}_{s.key}",
+                "state_topic": f"{t.base}/{s.key}",
+                "json_attributes_topic": f"{t.base}/{s.key}/attributes",
                 "availability_topic": self.avail_topic,
-                "device": self._device(),
+                "device": self._device(t),
             }
             for k, v in (("unit_of_measurement", s.unit), ("device_class", s.device_class),
                          ("state_class", s.state_class), ("icon", s.icon)):
                 if v:
                     cfg[k] = v
-            self.client.publish(f"{self.cfg.discovery_prefix}/sensor/{self.cfg.device_id}/{s.key}/config",
-                                json.dumps(cfg), retain=True)
-        self.announced = True
+            self.client.publish(f"{self.cfg.discovery_prefix}/sensor/{t.device_id}/{s.key}/config", json.dumps(cfg), retain=True)
+        self.announced.add(t.device_id)
 
-    def publish(self, payload: dict) -> bool:
-        self.last_payload = payload
+    def publish(self, payload: dict, user: dict | None = None) -> bool:
+        t = target(self.cfg, user)
+        self.last[t.device_id] = (payload, t)
+        return self._publish(payload, t)
+
+    def _publish(self, payload: dict, t: Target) -> bool:
         if not self.connected.is_set():
             return False
-        if not self.announced:
-            self._announce()
+        if t.device_id not in self.announced:
+            self._announce(t)
         state, attrs = payload["state"], payload["attributes"]
         for s in SENSORS:
             if s.key in state:
-                self.client.publish(f"{self.cfg.base_topic}/{s.key}", str(state[s.key]), retain=True)
-                self.client.publish(f"{self.cfg.base_topic}/{s.key}/attributes",
-                                    json.dumps(attrs.get(s.key, {}), default=str), retain=True)
-        self.client.publish(f"{self.cfg.base_topic}/state", json.dumps(state, default=str), retain=True)
+                self.client.publish(f"{t.base}/{s.key}", str(state[s.key]), retain=True)
+                self.client.publish(f"{t.base}/{s.key}/attributes", json.dumps(attrs.get(s.key, {}), default=str), retain=True)
+        self.client.publish(f"{t.base}/state", json.dumps(state, default=str), retain=True)
         return True
 
     def close(self) -> None:
@@ -147,20 +165,21 @@ class RestPublisher:
     def __init__(self, cfg: Config):
         self.cfg = cfg
 
-    def publish(self, payload: dict) -> bool:
+    def publish(self, payload: dict, user: dict | None = None) -> bool:
         ok = True
+        t = target(self.cfg, user)
         state, attrs = payload["state"], payload["attributes"]
         for s in SENSORS:
             if s.key not in state:
                 continue
-            a = {"friendly_name": f"{self.cfg.device_name} {s.name}", **attrs.get(s.key, {})}
+            a = {"friendly_name": f"{t.name} {s.name}", **attrs.get(s.key, {})}
             for k, v in (("unit_of_measurement", s.unit), ("device_class", s.device_class),
                          ("state_class", s.state_class), ("icon", s.icon)):
                 if v:
                     a[k] = v
             body = json.dumps({"state": state[s.key], "attributes": a}, default=str).encode()
             req = urllib.request.Request(
-                f"{self.cfg.ha_url}/api/states/sensor.{self.cfg.device_id}_{s.key}", data=body, method="POST",
+                f"{self.cfg.ha_url}/api/states/sensor.{t.device_id}_{s.key}", data=body, method="POST",
                 headers={"Authorization": f"Bearer {self.cfg.ha_token}", "Content-Type": "application/json"})
             try:
                 urllib.request.urlopen(req, timeout=10).close()

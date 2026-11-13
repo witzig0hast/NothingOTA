@@ -44,6 +44,18 @@ class Config:
     ha_url: str | None = field(default_factory=lambda: (_env("HA_URL") or "").rstrip("/") or None)
     ha_token: str | None = field(default_factory=lambda: _secret("HA_TOKEN"))
 
+    # AI analysis: any OpenAI-compatible endpoint (LiteLLM proxy, Ollama /v1, OpenAI ...)
+    llm_base_url: str | None = field(default_factory=lambda: _env("LLM_BASE_URL"))
+    llm_api_key: str | None = field(default_factory=lambda: _secret("LLM_API_KEY"))
+    llm_model: str | None = field(default_factory=lambda: _env("LLM_MODEL"))
+    llm_timeout: int = field(default_factory=lambda: int(_env("LLM_TIMEOUT", "120")))
+    # Website accounts: "first" = only the first account may register itself, "open" = everyone
+    signup: str = field(default_factory=lambda: (_env("SIGNUP", "first") or "first").lower())
+    # Session cookie "Secure" flag: auto = when the reverse proxy says https
+    cookie_secure: str = field(default_factory=lambda: (_env("COOKIE_SECURE", "auto") or "auto").lower())
+    # Public address (https://cmf.example.de) - used for the one-tap app links
+    public_url: str | None = field(default_factory=lambda: (_env("PUBLIC_URL") or "").rstrip("/") or None)
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "cmfwatch.db"

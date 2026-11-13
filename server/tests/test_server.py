@@ -22,7 +22,7 @@ class FakePub:
     def __init__(self):
         self.payloads = []
 
-    def publish(self, p):
+    def publish(self, p, user=None):
         self.payloads.append(p)
         return True
 
@@ -50,6 +50,7 @@ def server(tmp_path):
     cfg = Config(api_token="secret", data_dir=tmp_path / "data", import_dir=tmp_path / "import")
     pub = FakePub()
     svc = Service(cfg, publishers=[pub])
+    svc.store.create_user("karl", "geheim123", is_admin=True)  # id 1: the legacy API_TOKEN maps to it
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(svc))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield svc, pub, f"http://127.0.0.1:{httpd.server_port}"
@@ -87,7 +88,7 @@ def test_app_zip_upload(server, tmp_path):
     assert st["heart_rate"] == 66 and st["spo2"] == 96 and st["resting_heart_rate"] == 55
     assert st["last_workout"] == "Laufen" and "last_upload" in st
     # windowed upload: the (partial) first day is ignored
-    assert svc.store.history("daily", 0)[0]["date"] == today
+    assert svc.store.daily(1, 36500)[0]["date"] == today
     assert pub.payloads and pub.payloads[-1]["state"]["steps_today"] == 4321
 
     # a later upload with a partial window must not lower today's steps
@@ -107,9 +108,9 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     assert st["sleep_deep"] == 60 and st["sleep_rem"] == 20 and st["stress"] == 23 and st["spo2"] == 97
     assert st["last_workout"] == "OUTDOOR_RUNNING"
     assert "watch_battery" not in st  # test data is from 2025: stale battery values are not published
-    assert [h["value"] for h in req(base + "/api/history?metric=battery&days=36500")[1]] == [81, 77]
-    hist = req(base + "/api/history?metric=heart_rate&days=36500")[1]
-    assert [h["value"] for h in hist] == [58]
+    assert [v for _, v in req(base + "/api/series?metric=battery&days=36500")[1]["points"]] == [81, 77]
+    hist = req(base + "/api/series?metric=heart_rate&days=36500")[1]["points"]
+    assert [v for _, v in hist] == [58]
 
     # unsupported file
     assert req(base + "/api/upload", b"hello world")[0] == 415
@@ -129,7 +130,7 @@ def test_gadgetbridge_upload_and_import_dir(server, tmp_path):
     time.sleep(1.5)
     svc.stop.set()
     t.join(5)
-    assert any(u["name"] == "gb.zip" for u in svc.store.uploads())
+    assert any(u["name"] == "gb.zip" for u in svc.store.uploads(1))
 
 
 def test_nap_is_not_last_night(server, tmp_path):
@@ -154,7 +155,7 @@ def test_nap_is_not_last_night(server, tmp_path):
     assert st["sleep_duration"] == 430 and st["sleep_awake"] == 50 and st["sleep_deep"] == 90
     assert st["sleep_end"].startswith(f"{d}T07:00") or "06:00" in st["sleep_end"] or st["sleep_end"].endswith("+00:00")
     assert st["nap_today"] == 40
-    nights = req(base + "/api/history?metric=nights&days=3")[1]
+    nights = req(base + "/api/sleep?days=3")[1]["nights"]
     assert [n["type"] for n in nights] == ["night", "nap"]
 
 
@@ -177,12 +178,15 @@ def test_old_database_is_migrated(tmp_path):
     import sqlite3 as sq
     from cmfserver.store import Store
     db = tmp_path / "old.db"
-    c = sq.connect(db)
+    c = sq.connect(db)  # single-user schema of cmfserver 1.x
+    c.execute("CREATE TABLE daily (date TEXT PRIMARY KEY, steps INTEGER)")
+    c.execute("INSERT INTO daily VALUES ('2026-01-01', 4321)")
     c.execute("CREATE TABLE workout (start_ts INTEGER PRIMARY KEY, start TEXT, end TEXT, duration_min REAL, type TEXT, source TEXT)")
     c.commit(); c.close()
-    Store(db)
+    st = Store(db)
     cols = {r[1] for r in sq.connect(db).execute("PRAGMA table_info(workout)")}
-    assert {"distance_km", "avg_hr"} <= cols
+    assert {"distance_km", "avg_hr", "user_id"} <= cols
+    assert st.daily(1, 36500)[0]["steps"] == 4321  # old data now belongs to the first account
 
 
 def test_battery_only_zip(server, tmp_path):
