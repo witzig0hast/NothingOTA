@@ -109,7 +109,7 @@ object Exporters {
     }
 
     /** ZIP in the cmfserver export layout (workouts.csv + heart_rate.csv). */
-    fun serverZip(a: Activity, hr: List<Pair<Long, Int>>, out: File): File {
+    fun serverZip(a: Activity, hr: List<Pair<Long, Int>>, out: File, points: List<TrackPoint> = emptyList()): File {
         val z = ZoneId.systemDefault()
         fun iso(ms: Long) = Instant.ofEpochMilli(ms).atZone(z).toOffsetDateTime().truncatedTo(ChronoUnit.SECONDS).toString()
         ZipOutputStream(out.outputStream()).use { zip ->
@@ -118,6 +118,14 @@ object Exporters {
                 "${iso(a.start)},${iso(a.end)},${f(a.movingMs / 60000.0, 1)},${a.sport.label},${f(a.distance / 1000, 2)}," +
                 "${a.avgHr ?: ""},${a.maxHr ?: ""},${f(a.elevGain, 0)},${a.kcal?.toInt() ?: ""},cmftrack\n").toByteArray())
             zip.closeEntry()
+            if (points.isNotEmpty()) {  // GPS track for the map on the website
+                zip.putNextEntry(ZipEntry("track.csv"))
+                val ws = iso(a.start)
+                zip.write(("workout_start,time,lat,lon,alt\n" + points.joinToString("") {
+                    "$ws,${iso(it.time)},${f(it.lat)},${f(it.lon)},${it.alt?.let { v -> f(v, 1) } ?: ""}\n"
+                }).toByteArray())
+                zip.closeEntry()
+            }
             if (hr.isNotEmpty()) {
                 zip.putNextEntry(ZipEntry("heart_rate.csv"))
                 zip.write(("time,bpm\n" + hr.joinToString("") { "${iso(it.first)},${it.second}\n" }).toByteArray())

@@ -124,7 +124,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         fun label(min: Long) = if (min < 60) "alle $min Minuten" else if (min == 60L) "jede Stunde" else "alle ${min / 60} Stunden"
 
         fun schedule(ctx: Context, enabled: Boolean, minutes: Long = Settings(ctx).intervalMin) {
-            val wm = WorkManager.getInstance(ctx)
+            val wm = runCatching { WorkManager.getInstance(ctx) }.getOrElse { return }
             if (!enabled) { wm.cancelUniqueWork(NAME); return }
             val req = PeriodicWorkRequestBuilder<SyncWorker>(minutes.coerceAtLeast(15), TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

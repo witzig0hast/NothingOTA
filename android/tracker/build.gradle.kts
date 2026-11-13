@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.witzig0hast.cmftrack"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
     }
     signingConfigs {
         create("shared") {
@@ -47,7 +47,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("org.maplibre.gl:android-sdk:11.13.0")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
 
     testImplementation("junit:junit:4.13.2")

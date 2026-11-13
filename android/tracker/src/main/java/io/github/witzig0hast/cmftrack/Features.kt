@@ -103,65 +103,6 @@ object Stats {
     }
 }
 
-// ------------------------------------------------------------------------------------------ planned routes (GPX)
-data class PlannedRoute(val name: String, val points: List<Pair<Double, Double>>) {
-    /** cumulative distance along the route for each point */
-    val cumulative: DoubleArray by lazy {
-        DoubleArray(points.size).also { c -> for (i in 1 until points.size) c[i] = c[i - 1] + Geo.distance(points[i - 1].first, points[i - 1].second, points[i].first, points[i].second) }
-    }
-    val length get() = cumulative.lastOrNull() ?: 0.0
-
-    /** (distance from the route in m, distance along the route of the closest point) */
-    fun locate(lat: Double, lon: Double): Pair<Double, Double> {
-        val kx = 111_195.0 * cos(lat * PI / 180); val ky = 111_195.0
-        var bestD = Double.MAX_VALUE; var bestAlong = 0.0
-        for (i in 1 until points.size) {
-            val ax = (points[i - 1].second - lon) * kx; val ay = (points[i - 1].first - lat) * ky
-            val bx = (points[i].second - lon) * kx; val by = (points[i].first - lat) * ky
-            val dx = bx - ax; val dy = by - ay
-            val len2 = dx * dx + dy * dy
-            val t = if (len2 > 0) (-(ax * dx + ay * dy) / len2).coerceIn(0.0, 1.0) else 0.0
-            val px = ax + t * dx; val py = ay + t * dy
-            val d = sqrt(px * px + py * py)
-            if (d < bestD) { bestD = d; bestAlong = cumulative[i - 1] + t * sqrt(len2) }
-        }
-        return bestD to bestAlong
-    }
-
-    companion object {
-        /** Reads track points, route points or (as last resort) waypoints from a GPX file. */
-        fun parseGpx(input: InputStream, fallbackName: String): PlannedRoute {
-            val trk = mutableListOf<Pair<Double, Double>>(); val rte = mutableListOf<Pair<Double, Double>>(); val wpt = mutableListOf<Pair<Double, Double>>()
-            var name: String? = null
-            val p = Xml.newPullParser(); p.setInput(input, null)
-            var inName = false
-            while (p.next() != XmlPullParser.END_DOCUMENT) {
-                when (p.eventType) {
-                    XmlPullParser.START_TAG -> when (p.name) {
-                        "trkpt", "rtept", "wpt" -> {
-                            val lat = p.getAttributeValue(null, "lat")?.toDoubleOrNull(); val lon = p.getAttributeValue(null, "lon")?.toDoubleOrNull()
-                            if (lat != null && lon != null) when (p.name) { "trkpt" -> trk += lat to lon; "rtept" -> rte += lat to lon; else -> wpt += lat to lon }
-                        }
-                        "name" -> inName = name == null
-                    }
-                    XmlPullParser.TEXT -> if (inName) { name = p.text.trim().ifEmpty { null }; inName = false }
-                    XmlPullParser.END_TAG -> if (p.name == "name") inName = false
-                }
-            }
-            val pts = trk.ifEmpty { rte }.ifEmpty { wpt }
-            require(pts.size >= 2) { "Die Datei enthält keine Route" }
-            return PlannedRoute(name ?: fallbackName, pts)
-        }
-    }
-}
-
-object RouteStore {
-    private fun file(ctx: Context) = java.io.File(ctx.filesDir, "route.gpx")
-    fun save(ctx: Context, input: InputStream) { file(ctx).outputStream().use { input.copyTo(it) } }
-    fun load(ctx: Context): PlannedRoute? = runCatching { file(ctx).inputStream().use { PlannedRoute.parseGpx(it, "Geplante Route") } }.getOrNull()
-    fun clear(ctx: Context) { file(ctx).delete() }
-}
-
 // ------------------------------------------------------------------------------------------ voice coach
 class Voice(ctx: Context) : TextToSpeech.OnInitListener {
     private val tts = TextToSpeech(ctx.applicationContext, this)
@@ -278,7 +219,7 @@ class HeartRateBackfill(ctx: Context, params: WorkerParameters) : CoroutineWorke
                 val updated = Analysis.withHeartRate(a, store.points(a.id), r.samples, prefs.profile, r.source)
                 store.save(updated); n++
                 if (prefs.autoUpload && prefs.serverUrl.startsWith("http")) runCatching {
-                    Exporters.upload(prefs.serverUrl, prefs.token, Exporters.serverZip(updated, r.samples, java.io.File(ctx.cacheDir, "w${a.id}.zip")))
+                    Exporters.upload(prefs.serverUrl, prefs.token, Exporters.serverZip(updated, r.samples, java.io.File(ctx.cacheDir, "w${a.id}.zip"), store.points(a.id)))
                 }
             }
             return n

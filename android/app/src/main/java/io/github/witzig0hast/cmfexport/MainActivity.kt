@@ -74,6 +74,27 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         bind()
         if (intent?.action == "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" || intent?.action == "android.intent.action.VIEW_PERMISSION_USAGE") showPrivacy()
+        handleConnectLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleConnectLink(intent) }
+
+    /** cmfexport://connect?server=…&token=… from the website: fill in the connection and start syncing. */
+    private fun handleConnectLink(i: Intent?) {
+        val uri = i?.data ?: return
+        if (uri.scheme != "cmfexport" || uri.host != "connect") return
+        val server = uri.getQueryParameter("server") ?: return
+        val token = uri.getQueryParameter("token") ?: return
+        settings.serverUrl = server; settings.token = token; settings.autoSync = true
+        SyncWorker.schedule(this, true)
+        v<TextInputEditText>(R.id.urlInput).setText(server); v<TextInputEditText>(R.id.tokenInput).setText(token)
+        v<MaterialSwitch>(R.id.autoSync).isChecked = true
+        renderServer()
+        i.data = null
+        MaterialAlertDialogBuilder(this).setTitle("Mit CMF Health verbunden ✓")
+            .setMessage("Deine Daten werden ab jetzt ${SyncWorker.label(settings.intervalMin)} an $server gesendet. Jetzt gleich das erste Mal senden?")
+            .setPositiveButton("Jetzt senden") { _, _ -> hcClient()?.let { hcPermissions.launch(HealthConnectExporter.PERMISSIONS + HealthConnectExporter.BACKGROUND) }; sync() }
+            .setNegativeButton("Später", null).show()
     }
 
     override fun onResume() {

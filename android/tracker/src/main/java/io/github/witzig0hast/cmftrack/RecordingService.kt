@@ -59,6 +59,11 @@ data class LiveState(
     val routeRemaining: Double? = null,
     val offRoute: Double? = null,
     val calories: Double = 0.0,
+    val routePoints: List<Pair<Double, Double>> = emptyList(),
+    val navArrow: String? = null,
+    val navText: String? = null,
+    val navDistance: Double? = null,
+    val rerouting: Boolean = false,
 )
 
 object Recorder {
@@ -72,6 +77,8 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
         const val ACTION_STOP = "stop"; const val ACTION_LAP = "lap"; const val ACTION_TOGGLE = "toggle"
         const val EXTRA_SPORT = "sport"
         private const val CHANNEL = "recording"
+        private const val NAV_CHANNEL = "navigation"
+        private const val NAV_ID = 2
         private const val NOTIF_ID = 1
 
         fun send(ctx: Context, action: String, sport: Sport? = null) {
@@ -99,6 +106,12 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
     private var offRoute: Double? = null
     private var offRouteSince: Long? = null
     private var offRouteWarned = false
+    private var routeAlong: Double? = null
+    private var announced = mutableSetOf<String>()   // "<maneuver index>:<far|near>"
+    private var nav: Pair<Maneuver, Double>? = null
+    private var rerouting = false
+    private var lastReroute = 0L
+    private var lastFix: Location? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -115,6 +128,11 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
         store = Store(this); prefs = Prefs(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Aufzeichnung", NotificationManager.IMPORTANCE_LOW))
+        // Turn instructions: a separate, alerting notification - the CMF Watch shows it (enable CMF Track in the CMF app)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(NAV_CHANNEL, "Navigation (auf der Uhr)", NotificationManager.IMPORTANCE_HIGH).apply {
+                enableVibration(true); vibrationPattern = longArrayOf(0, 250, 120, 250)
+            })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -137,6 +155,7 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
         stats = TrackStats(sport)
         laps.clear(); announcedKm = 0
         route = if (prefs.useRoute) RouteStore.load(this) else null
+        routeAlong = null; announced.clear(); finishedRoute = false
         val n = notification()
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(NOTIF_ID, n)
 
@@ -218,21 +237,95 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
 
     private fun followRoute(l: Location) {
         val r = route ?: return
-        val (off, along) = r.locate(l.latitude, l.longitude)
+        lastFix = l
+        val (off, along) = r.locate(l.latitude, l.longitude, routeAlong)
         offRoute = off
-        routeRemaining = (r.length - along).coerceAtLeast(0.0)
+        if (off < 60) routeAlong = along
+        routeRemaining = (r.length - (routeAlong ?: along)).coerceAtLeast(0.0)
         val now = System.currentTimeMillis()
-        if (off > 60) {
+        val bike = r.mode == "bicycle"
+        if (off > 50) {
             if (offRouteSince == null) offRouteSince = now
-            if (!offRouteWarned && now - offRouteSince!! > 8000) {
-                offRouteWarned = true; vibrate(400); voice?.say("Du bist von der Route abgekommen")
+            val since = now - offRouteSince!!
+            if (!offRouteWarned && since > 8000) {
+                offRouteWarned = true; vibrate(400)
+                voice?.say("Du bist von der Route abgekommen")
+                navNotify("⚠", "Von der Route abgekommen", "${off.toInt()} m neben der Route")
             }
+            // planned routes (not imported GPX) get recalculated from here to the destination
+            if (since > 15_000 && r.destination != null && r.mode != null && !rerouting && now - lastReroute > 30_000) reroute(l, r)
+            nav = null
         } else {
-            if (offRouteWarned) voice?.say("Wieder auf der Route")
+            if (offRouteWarned) { voice?.say("Wieder auf der Route"); cancelNav() }
             offRouteSince = null; offRouteWarned = false
+            guide(r, routeAlong ?: along, bike)
         }
-        if (routeRemaining!! < 30 && along > r.length * 0.8 && !finishedRoute) { finishedRoute = true; voice?.say("Ziel erreicht") }
+        if (routeRemaining!! < 30 && (routeAlong ?: along) > r.length * 0.8 && !finishedRoute) {
+            finishedRoute = true; voice?.say("Ziel erreicht"); navNotify("🏁", "Ziel erreicht", r.name); vibrate(600)
+        }
     }
+
+    /** Announces the next turn twice: early ("in 150 m …") and right at it. */
+    private fun guide(r: PlannedRoute, along: Double, bike: Boolean) {
+        val next = r.nextManeuver(along)
+        nav = next
+        val (m, dist) = next ?: return
+        if (m.isArrival) return
+        val far = if (bike) 250.0 else 150.0
+        val near = if (bike) 50.0 else 30.0
+        val key = m.index.toString()
+        when {
+            dist <= near && announced.add("$key:near") -> {
+                announced.add("$key:far")
+                voice?.say(m.verbal.substringBefore(" Dann").ifEmpty { m.text })
+                navNotify(m.arrow, m.text, "Jetzt" + (m.street?.let { " · $it" } ?: ""))
+                vibrate(300)
+            }
+            dist <= far && dist > near * 1.5 && announced.add("$key:far") -> {
+                val d = (Math.round(dist / 10) * 10).toInt()
+                voice?.say("In $d Metern ${m.text.replaceFirstChar { it.lowercase() }}")
+                navNotify(m.arrow, "In $d m: ${m.text}", r.name)
+            }
+        }
+    }
+
+    private fun reroute(l: Location, r: PlannedRoute) {
+        rerouting = true; lastReroute = System.currentTimeMillis()
+        val dest = r.destination!!
+        val sport = stats?.sport ?: Sport.RUN
+        scope.launch {
+            val res = runCatching {
+                // remaining via points (round trips) are kept, already passed ones dropped
+                val remainingVia = r.via.filter { v -> r.locate(v.first, v.second).second > (routeAlong ?: 0.0) }
+                Routing.route(listOf(l.latitude to l.longitude) + remainingVia + listOf(dest), sport, r.name, dest)
+            }
+            main.post {
+                rerouting = false
+                res.onSuccess { nr ->
+                    route = nr; routeAlong = 0.0; announced.clear(); offRouteSince = null; offRouteWarned = false
+                    voice?.say("Neue Route berechnet")
+                    navNotify("↻", "Neue Route", "Noch ${Fmt.km(nr.length)} km")
+                }
+            }
+        }
+    }
+
+    private fun navNotify(arrow: String, title: String, text: String) {
+        val open = PendingIntent.getActivity(this, 3, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+        val n = Notification.Builder(this, NAV_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle("$arrow $title")
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setTimeoutAfter(90_000)
+            .setContentIntent(open)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .build()
+        runCatching { getSystemService(NotificationManager::class.java).notify(NAV_ID, n) }
+    }
+
+    private fun cancelNav() = runCatching { getSystemService(NotificationManager::class.java).cancel(NAV_ID) }
+
     private var finishedRoute = false
 
     override fun onSensorChanged(e: SensorEvent) {
@@ -276,6 +369,7 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
                 if (bleHrAt > 0 && System.currentTimeMillis() - bleHrAt < 30_000) "Puls live per Bluetooth" else hrStatus,
                 fromWatch, lastHr?.first, laps.toList(), route?.name, routeRemaining, offRoute,
                 prefs.profile.calories(s.sport, s.movingMs / 1000.0, s.avgHr),
+                route?.points ?: emptyList(), nav?.first?.arrow, nav?.first?.text, nav?.second, rerouting,
             )
         }
         if (s != null && System.currentTimeMillis() / 1000 % 30 == 0L) store.save(summary(false)) // crash safety
@@ -284,6 +378,7 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
     private fun stop() {
         main.removeCallbacksAndMessages(null)
         hrBle?.stop(); hrBle = null
+        cancelNav()
         getSystemService(LocationManager::class.java).removeUpdates(this)
         getSystemService(SensorManager::class.java).unregisterListener(this)
         stats?.let {

@@ -24,7 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.osmdroid.views.MapView
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -35,7 +34,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var store: Store
     private lateinit var prefs: Prefs
     private lateinit var activity: Activity
-    private lateinit var map: MapView
+    private lateinit var map: MapHost
     private var points: List<TrackPoint> = emptyList()
     private var hr: List<Pair<Long, Int>> = emptyList()
     private var hrExplain: String? = null
@@ -47,13 +46,12 @@ class DetailActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Maps.init(this)
         setContentView(R.layout.activity_detail)
         store = Store(this); prefs = Prefs(this)
         activity = store.get(intent.getLongExtra("id", 0)) ?: return finish()
         points = store.points(activity.id); hr = store.heartRates(activity.id)
         if (activity.efforts.isEmpty() && points.size > 1) { activity = activity.copy(efforts = BestEfforts.compute(points)); store.save(activity) }
-        setupMap()
+        setupMap(savedInstanceState)
         render()
 
         v<View>(R.id.loadHrButton).setOnClickListener { loadWatchHr(manual = true) }
@@ -85,25 +83,30 @@ class DetailActivity : AppCompatActivity() {
 
     override fun onResume() { super.onResume(); map.onResume() }
     override fun onPause() { map.onPause(); super.onPause() }
+    override fun onStart() { super.onStart(); map.onStart() }
+    override fun onStop() { map.onStop(); super.onStop() }
+    override fun onDestroy() { map.onDestroy(); super.onDestroy() }
+    override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); map.onSaveInstanceState(outState) }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun setupMap() {
-        map = v(R.id.map)
-        if (points.size < 2) { map.visibility = View.GONE; v<View>(R.id.route).visibility = View.VISIBLE; return }
-        Maps.setup(map, prefs.layer)
-        map.overlays.addAll(Maps.paceTrack(map, points))
-        map.overlays.add(MarkersOverlay(points))
-        Maps.fit(map, Maps.geo(points))
+    private fun setupMap(saved: Bundle?) {
+        val container = v<android.widget.FrameLayout>(R.id.mapContainer)
+        map = MapHost(container, prefs.layer, saved)
+        map.follow = false
+        map.setTrack(points, paceColors = true)
+        map.showKmMarkers(true)
+        val pts = points.map { it.lat to it.lon }
+        container.post { map.fit(pts, 90) }
         // let the map pan inside the scroll view
-        map.setOnTouchListener { view, e ->
+        container.setOnTouchListener { view, e ->
             view.parent.requestDisallowInterceptTouchEvent(e.action != MotionEvent.ACTION_UP && e.action != MotionEvent.ACTION_CANCEL); false
         }
-        v<View>(R.id.fullButton).setOnClickListener { Maps.fit(map, Maps.geo(points)) }
+        v<View>(R.id.fullButton).setOnClickListener { map.fit(pts, 90) }
         v<View>(R.id.layerButton).setOnClickListener {
             val layers = Layer.entries
             MaterialAlertDialogBuilder(this).setTitle("Kartenansicht")
                 .setSingleChoiceItems(layers.map { it.label }.toTypedArray(), layers.indexOf(prefs.layer)) { d, i ->
-                    prefs.layer = layers[i]; map.setTileSource(layers[i].source); d.dismiss()
+                    prefs.layer = layers[i]; map.setLayer(layers[i]); d.dismiss()
                 }.show()
         }
     }
@@ -115,7 +118,6 @@ class DetailActivity : AppCompatActivity() {
             (if (a.origin == "watch") " · ⌚ von der Uhr" else "")
         v<TextView>(R.id.title).text = a.title
         v<TextView>(R.id.notes).apply { text = a.notes ?: ""; visibility = if (a.notes.isNullOrBlank()) View.GONE else View.VISIBLE }
-        v<RouteView>(R.id.route).set(points)
 
         val grid = v<GridLayout>(R.id.stats)
         grid.removeAllViews()
@@ -332,7 +334,7 @@ class DetailActivity : AppCompatActivity() {
         busy(true)
         val msg = runCatching {
             withContext(Dispatchers.IO) {
-                val f = Exporters.serverZip(activity, hr, File(cacheDir, "workout_${activity.id}.zip"))
+                val f = Exporters.serverZip(activity, hr, File(cacheDir, "workout_${activity.id}.zip"), points)
                 Exporters.upload(prefs.serverUrl, prefs.token, f)
             }
             "An Home Assistant gesendet ✓"

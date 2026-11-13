@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true">
+
+    <FrameLayout android:id="@+id/mapContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
+
+    <!-- search -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardElevation="4dp"
+            app:contentPadding="6dp">
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/backButton" style="@style/Widget.Material3.Button.IconButton" android:layout_width="48dp" android:layout_height="48dp" app:icon="@drawable/ic_back" />
+                    <EditText
+                        android:id="@+id/searchInput"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:hint="Wohin? Ort oder Adresse suchen"
+                        android:imeOptions="actionSearch"
+                        android:inputType="text"
+                        android:singleLine="true"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/muted" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/clearButton" style="@style/Widget.Material3.Button.IconButton" android:layout_width="48dp" android:layout_height="48dp" android:visibility="gone" app:icon="@drawable/ic_close" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/results" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:id="@+id/hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/pill_bg"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="6dp"
+            android:text="Tipp: lange auf die Karte drücken, um ein Ziel zu setzen"
+            android:textColor="@color/on_surface"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/centerButton"
+        style="@style/MapButton"
+        android:layout_gravity="end|center_vertical"
+        android:layout_margin="12dp"
+        app:icon="@drawable/ic_center" />
+
+    <!-- bottom sheet -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_margin="10dp"
+        app:cardElevation="6dp"
+        app:contentPadding="16dp">
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <com.google.android.material.chip.ChipGroup android:id="@+id/sportChips" android:layout_width="match_parent" android:layout_height="wrap_content" app:selectionRequired="true" app:singleLine="true" app:singleSelection="true" />
+
+            <com.google.android.material.chip.ChipGroup android:id="@+id/kindChips" android:layout_width="match_parent" android:layout_height="wrap_content" app:selectionRequired="true" app:singleSelection="true">
+                <com.google.android.material.chip.Chip android:id="@+id/kindTarget" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" android:text="Zum Ziel" />
+                <com.google.android.material.chip.Chip android:id="@+id/kindRound" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Rundtour" />
+                <com.google.android.material.chip.Chip android:id="@+id/kindBack" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Hin &amp; zurück" />
+            </com.google.android.material.chip.ChipGroup>
+
+            <LinearLayout android:id="@+id/roundBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+                <com.google.android.material.slider.Slider android:id="@+id/kmSlider" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:stepSize="1" android:value="8" android:valueFrom="2" android:valueTo="60" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/roundButton" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="8 km planen" />
+            </LinearLayout>
+
+            <TextView android:id="@+id/summaryTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textAppearance="@style/TextAppearance.Material3.TitleLarge" android:textStyle="bold" />
+            <TextView android:id="@+id/summary" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progress" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:indeterminate="true" android:visibility="gone" />
+
+            <HorizontalScrollView android:id="@+id/recentBox" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:scrollbars="none">
+                <com.google.android.material.chip.ChipGroup android:id="@+id/recentChips" android:layout_width="wrap_content" android:layout_height="wrap_content" app:singleLine="true" />
+            </HorizontalScrollView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/useButton"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="10dp"
+                android:enabled="false"
+                android:text="Route übernehmen"
+                android:textSize="16sp"
+                app:icon="@drawable/ic_route" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>

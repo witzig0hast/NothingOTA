@@ -10,6 +10,9 @@ import android.view.View
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.health.connect.client.HealthConnectClient
@@ -34,24 +37,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
-import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), LocationListener {
     private lateinit var prefs: Prefs
     private lateinit var store: Store
-    private lateinit var map: MapView
-    private var myLocation: MyLocationNewOverlay? = null
-    private var liveLine: Polyline? = null
-    private var routeLine: Polyline? = null
+    private lateinit var map: MapHost
+    private var locating = false
     private var lastSeenId = 0L
     private var lastPointCount = -1
     private val metricViews = mutableMapOf<String, Pair<TextView, TextView>>()
@@ -61,7 +57,7 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------------- permissions & pickers
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        if (hasLocation()) { enableMyLocation(); afterPermissions?.invoke() } else snack("Ohne genauen Standort kann keine Strecke aufgezeichnet werden")
+        if (hasLocation()) { startLocating(); afterPermissions?.invoke() } else snack("Ohne genauen Standort kann keine Strecke aufgezeichnet werden")
         afterPermissions = null
     }
     private var afterPermissions: (() -> Unit)? = null
@@ -78,15 +74,19 @@ class MainActivity : AppCompatActivity() {
         }.onFailure { snack("Keine gültige GPX-Route: ${it.message}") }
         renderRoute()
     }
+    private val planRoute = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        renderRoute(); renderReadyInfo()
+        v<ChipGroup>(R.id.sportChips).let { g -> for (i in 0 until g.childCount) (g.getChildAt(i) as Chip).isChecked = g.getChildAt(i).tag == prefs.sport }
+    }
     private val routeConsent = registerForActivityResult(ExerciseRouteRequestContract()) { route -> importNext(route) }
 
     // ---------------------------------------------------------------- lifecycle
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Maps.init(this)
         prefs = Prefs(this); store = Store(this)
         setContentView(R.layout.activity_main)
-        setupMap(); bindRecord(); bindProfile()
+        setupMap(savedInstanceState); bindRecord(); bindProfile()
+        handleConnectLink(intent)
         v<BottomNavigationView>(R.id.nav).setOnItemSelectedListener { show(it.itemId); true }
         v<View>(R.id.importButton).setOnClickListener { importFromWatch() }
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { Recorder.live.collect(::render) } }
@@ -96,15 +96,57 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        map.onResume(); myLocation?.enableMyLocation()
+        map.onResume(); startLocating()
         renderHistory(); renderStats(); renderProfileStatus()
         lifecycleScope.launch { if (withContext(Dispatchers.IO) { runCatching { HeartRateBackfill.run(this@MainActivity) }.getOrDefault(0) } > 0) renderHistory() }
     }
 
     override fun onPause() {
         currentFocus?.clearFocus() // saves the focused profile field
-        map.onPause(); myLocation?.disableMyLocation()
+        map.onPause(); stopLocating()
         super.onPause()
+    }
+
+    override fun onStart() { super.onStart(); map.onStart() }
+    override fun onStop() { map.onStop(); super.onStop() }
+    override fun onDestroy() { map.onDestroy(); super.onDestroy() }
+    override fun onLowMemory() { super.onLowMemory(); map.onLowMemory() }
+    override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); map.onSaveInstanceState(outState) }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleConnectLink(intent) }
+
+    /** cmftrack://connect?server=…&token=… from the website: fill in the server connection. */
+    private fun handleConnectLink(i: Intent?) {
+        val uri = i?.data ?: return
+        if (uri.scheme != "cmftrack" || uri.host != "connect") return
+        val server = uri.getQueryParameter("server") ?: return
+        val token = uri.getQueryParameter("token") ?: return
+        prefs.serverUrl = server; prefs.token = token; prefs.autoUpload = true
+        v<TextInputEditText>(R.id.serverInput).setText(server); v<TextInputEditText>(R.id.tokenInput).setText(token)
+        v<MaterialSwitch>(R.id.autoUploadSwitch).isChecked = true
+        MaterialAlertDialogBuilder(this).setTitle("Mit Server verbunden ✓")
+            .setMessage("Deine Trainings werden ab jetzt an $server gesendet und erscheinen dort mit Karte und Puls.")
+            .setPositiveButton("OK", null).show()
+        i.data = null
+    }
+
+    // ---------------------------------------------------------------- own position before/without recording
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun startLocating() {
+        if (locating || !hasLocation() || Recorder.live.value.recording) return
+        val lm = getSystemService(LocationManager::class.java)
+        (lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER))?.let(::onLocationChanged)
+        runCatching { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this, android.os.Looper.getMainLooper()) }
+        runCatching { lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 0f, this, android.os.Looper.getMainLooper()) }
+        locating = true
+    }
+
+    private fun stopLocating() {
+        if (!locating) return
+        getSystemService(LocationManager::class.java).removeUpdates(this); locating = false
+    }
+
+    override fun onLocationChanged(l: Location) {
+        if (!Recorder.live.value.recording) map.setMyLocation(l.latitude, l.longitude, if (l.hasAccuracy()) l.accuracy else 30f)
     }
 
     private fun show(tab: Int) {
@@ -150,23 +192,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------------------- map
-    private fun setupMap() {
-        map = v(R.id.map)
-        Maps.setup(map, prefs.layer)
-        map.controller.setZoom(16.0)
-        map.controller.setCenter(GeoPoint(51.1657, 10.4515)) // Germany until the first fix
-        map.controller.setZoom(6.0)
-        if (hasLocation()) enableMyLocation()
-        liveLine = Maps.plainTrack(map, emptyList(), getColor(R.color.brand), 12f).also { map.overlays.add(it) }
+    private fun setupMap(saved: Bundle?) {
+        map = MapHost(v(R.id.mapContainer), prefs.layer, saved)
         renderRoute()
-        v<View>(R.id.centerButton).setOnClickListener {
-            myLocation?.let { it.enableFollowLocation(); it.myLocation?.let { p -> map.controller.animateTo(p, 16.5, 600L) } } ?: requestAll(null)
-        }
+        v<View>(R.id.centerButton).setOnClickListener { if (hasLocation()) map.recenter() else requestAll(null) }
         v<View>(R.id.layerButton).setOnClickListener {
             val layers = Layer.entries
             MaterialAlertDialogBuilder(this).setTitle("Kartenansicht")
                 .setSingleChoiceItems(layers.map { it.label }.toTypedArray(), layers.indexOf(prefs.layer)) { d, i ->
-                    prefs.layer = layers[i]; map.setTileSource(layers[i].source); d.dismiss()
+                    prefs.layer = layers[i]; map.setLayer(layers[i]); d.dismiss()
                 }.show()
         }
         renderVoiceButton()
@@ -178,30 +212,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderVoiceButton() = v<MaterialButton>(R.id.voiceButton).setIconResource(if (prefs.voice) R.drawable.ic_voice else R.drawable.ic_voice_off)
 
-    private fun enableMyLocation() {
-        if (myLocation != null) return
-        myLocation = MyLocationNewOverlay(GpsMyLocationProvider(this), map).apply {
-            enableMyLocation(); enableFollowLocation()
-            runOnFirstFix { runOnUiThread { map.controller.setZoom(16.5); this.myLocation?.let { p -> map.controller.setCenter(p) } } }
-        }
-        map.overlays.add(myLocation)
-    }
-
     private fun renderRoute() {
-        routeLine?.let { map.overlays.remove(it) }; routeLine = null
         val r = if (prefs.useRoute) RouteStore.load(this) else null
         val chip = v<Chip>(R.id.routeChip)
+        map.setPlanned(r?.points ?: emptyList())
+        v<Chip>(R.id.planChip).setOnClickListener { planRoute.launch(Intent(this, PlanActivity::class.java)) }
         if (r == null) {
-            chip.text = "Route laden (GPX)"; chip.isCloseIconVisible = false
+            chip.text = "GPX importieren"; chip.isCloseIconVisible = false
             chip.setOnClickListener { pickRoute.launch(arrayOf("*/*")) }
         } else {
-            routeLine = Maps.plainTrack(map, r.points.map { GeoPoint(it.first, it.second) }, 0xFF3B4CC0.toInt(), 9f, dashed = true)
-            map.overlays.add(0, routeLine)
             chip.text = "${r.name} · ${Fmt.km(r.length)} km"; chip.isCloseIconVisible = true
             chip.setOnCloseIconClickListener { prefs.useRoute = false; RouteStore.clear(this); renderRoute() }
-            chip.setOnClickListener { Maps.fit(map, r.points.map { GeoPoint(it.first, it.second) }); myLocation?.disableFollowLocation() }
+            chip.setOnClickListener { map.fit(r.points) }
+            map.fit(r.points)
         }
-        map.invalidate()
     }
 
     // ---------------------------------------------------------------- record
@@ -234,6 +258,26 @@ class MainActivity : AppCompatActivity() {
         v<View>(R.id.lapButton).setOnClickListener { RecordingService.send(this, RecordingService.ACTION_LAP); snack("Runde gesetzt") }
         v<View>(R.id.stopButton).setOnClickListener { confirmStop() }
         v<View>(R.id.stopButton).setOnLongClickListener { RecordingService.send(this, RecordingService.ACTION_STOP); true }
+    }
+
+    private var lastRoute: List<Pair<Double, Double>>? = null
+
+    /** Turn-by-turn banner on top of the map while navigating. */
+    private fun renderNav(s: LiveState) {
+        val card = v<View>(R.id.navCard)
+        val active = s.recording && (s.navText != null || (s.offRoute ?: 0.0) > 50 || s.rerouting)
+        card.visibility = if (active) View.VISIBLE else View.GONE
+        if (!active) return
+        when {
+            s.rerouting -> { v<TextView>(R.id.navArrow).text = "↻"; v<TextView>(R.id.navDist).text = "Neue Route …"; v<TextView>(R.id.navText).text = "Berechne den Weg von hier" }
+            (s.offRoute ?: 0.0) > 50 -> { v<TextView>(R.id.navArrow).text = "⚠"; v<TextView>(R.id.navDist).text = "${s.offRoute!!.toInt()} m"; v<TextView>(R.id.navText).text = "neben der Route – zurück zur gestrichelten Linie" }
+            else -> {
+                v<TextView>(R.id.navArrow).text = s.navArrow ?: "↑"
+                v<TextView>(R.id.navDist).text = s.navDistance?.let { if (it >= 1000) "${Fmt.km(it)} km" else "${(Math.round(it / 10) * 10).toInt()} m" } ?: ""
+                v<TextView>(R.id.navText).text = s.navText
+            }
+        }
+        v<TextView>(R.id.navRemain).text = s.routeRemaining?.let { "Noch ${Fmt.km(it)} km" } ?: ""
     }
 
     private fun renderReadyInfo() {
@@ -304,15 +348,11 @@ class MainActivity : AppCompatActivity() {
 
         if (s.points.size != lastPointCount) {
             lastPointCount = s.points.size
-            liveLine?.setPoints(Maps.geo(s.points))
-            // without a followed own position, keep the newest track point in view
-            val last = s.points.lastOrNull()
-            if (last != null && myLocation?.isFollowLocationEnabled != true) {
-                if (map.zoomLevelDouble < 13) map.controller.setZoom(16.5)
-                map.controller.setCenter(GeoPoint(last.lat, last.lon))
-            }
-            map.invalidate()
+            map.setTrack(s.points)
+            if (s.recording) { stopLocating(); s.points.lastOrNull()?.let { map.setMyLocation(it.lat, it.lon, s.gpsAccuracy ?: 10f) } }
         }
+        if (s.recording && s.routePoints.isNotEmpty() && s.routePoints !== lastRoute) { lastRoute = s.routePoints; map.setPlanned(s.routePoints) }
+        renderNav(s)
         v<MaterialButton>(R.id.mainButton).apply {
             text = when { !s.recording -> "Start"; s.paused -> "Weiter"; else -> "Pause" }
             setIconResource(if (s.recording && !s.paused) R.drawable.ic_pause else R.drawable.ic_play)
@@ -323,7 +363,7 @@ class MainActivity : AppCompatActivity() {
         if (!s.recording && s.activityId != 0L && s.activityId != lastSeenId) {
             lastSeenId = s.activityId
             Recorder.state.value = LiveState()
-            liveLine?.setPoints(emptyList())
+            map.setTrack(emptyList()); startLocating()
             startActivity(Intent(this, DetailActivity::class.java).putExtra("id", s.activityId).putExtra("fresh", true))
         }
     }

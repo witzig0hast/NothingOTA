@@ -51,6 +51,13 @@
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
+            <!-- one-tap connect from the CMF Health website -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cmftrack" android:host="connect" />
+            </intent-filter>
         </activity>
         <activity-alias
             android:name="ViewPermissionUsageActivity"
@@ -64,6 +71,7 @@
         </activity-alias>
 
         <activity android:name=".DetailActivity" android:exported="false" />
+        <activity android:name=".PlanActivity" android:exported="false" android:windowSoftInputMode="adjustPan" />
 
         <service
             android:name=".RecordingService"

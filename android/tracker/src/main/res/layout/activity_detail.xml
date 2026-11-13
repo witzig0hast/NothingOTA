@@ -27,8 +27,7 @@
             android:paddingBottom="24dp">
 
             <FrameLayout android:layout_width="match_parent" android:layout_height="340dp">
-                <org.osmdroid.views.MapView android:id="@+id/map" android:layout_width="match_parent" android:layout_height="match_parent" />
-                <io.github.witzig0hast.cmftrack.RouteView android:id="@+id/route" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/surface" android:visibility="gone" />
+                <FrameLayout android:id="@+id/mapContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/layerButton" style="@style/MapButton" android:layout_gravity="top|end" android:layout_margin="12dp" app:icon="@drawable/ic_layers" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/fullButton" style="@style/MapButton" android:layout_gravity="bottom|end" android:layout_margin="12dp" app:icon="@drawable/ic_center" />
             </FrameLayout>

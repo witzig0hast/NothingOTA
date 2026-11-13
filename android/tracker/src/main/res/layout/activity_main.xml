@@ -19,8 +19,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <org.osmdroid.views.MapView
-                android:id="@+id/map"
+            <FrameLayout
+                android:id="@+id/mapContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
@@ -55,6 +55,28 @@
                 <com.google.android.material.button.MaterialButton android:id="@+id/centerButton" style="@style/MapButton" app:icon="@drawable/ic_center" />
             </LinearLayout>
 
+            <!-- turn-by-turn banner -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/navCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="72dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="#141414"
+                app:cardElevation="6dp"
+                app:contentPadding="14dp">
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/navArrow" android:layout_width="64dp" android:layout_height="wrap_content" android:gravity="center" android:text="↑" android:textColor="#FFFFFF" android:textSize="44sp" />
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:id="@+id/navDist" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="26sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/navText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#E6FFFFFF" android:textSize="15sp" />
+                        <TextView android:id="@+id/navRemain" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#99FFFFFF" android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- bottom panel -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/panel"
@@ -78,13 +100,25 @@
                                 app:singleLine="true"
                                 app:singleSelection="true" />
                         </HorizontalScrollView>
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/routeChip"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Route laden (GPX)"
-                            app:chipIcon="@drawable/ic_route" />
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/planChip"
+                                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:text="Route planen"
+                                app:chipIcon="@drawable/ic_search" />
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/routeChip"
+                                style="@style/Widget.Material3.Chip.Assist"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxWidth="220dp"
+                                android:text="GPX importieren"
+                                app:chipIcon="@drawable/ic_route" />
+                        </LinearLayout>
                         <TextView android:id="@+id/readyInfo" style="@style/Body" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" />
                     </LinearLayout>
 
